@@ -1,0 +1,127 @@
+# Plan 001 — PriceTag UI rebuild in PatternFly
+
+Working branch: `main` in `~/git/enmaas-patternfly`.
+Reference assets: `docs/reference/` (old-UI screenshots and accessibility
+snapshots captured 2026-11-24). Upstream live UI: https://32.198.91.108:8443.
+Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
+
+## Phase 0 — Bootstrap (done)
+
+- [x] Create repo `~/git/enmaas-patternfly`, git init.
+- [x] Enable MCP servers (project `opencode.json`): `context7` (remote,
+      PatternFly docs), `playwright` (browser testing; needs
+      `--ignore-https-errors` for the self-signed gateway — tracked below).
+- [x] Live UI inventory + screenshots (admin session).
+- [x] Route map from `cmd/main.go`; API surface list.
+- [x] Spec written.
+
+## Phase 1 — Scaffold the app
+
+- [ ] `npm create vite@latest . -- --template react-ts`; add
+      `@patternfly/react-core@^6.7`, `@patternfly/react-table`,
+      `@patternfly/react-charts`, `@patternfly/react-icons`, `react-router`.
+- [ ] App shell: PF6 `Page` + `Masthead` (Red Hat logo lockup + "PriceTag"
+      product name), `PageSidebar` navigation (Usage / My team / My keys /
+      Admin), role-aware nav, sign-out, live clock, Refresh.
+- [ ] Vite dev proxy: `/api`, `/login`, `/logout`, `/admin/impersonate` →
+      `TARGET` env (default `http://127.0.0.1:8080` local stack).
+- [ ] Local old stack: `podman compose -f docker-compose.standalone.yaml
+      up --build` in `~/git/pricetag-metering` (scripts/ scripts in
+      package.json).
+- **Accept**: shell renders at localhost:5173 with PF branding; nav routes
+  resolve; proxy reaches the local stack's `/health`.
+
+## Phase 2 — Auth + login
+
+- [ ] `/login` page: PF card, API-key input (password), error state on
+      `?error=invalid`, submit → `POST /login`, redirect by role
+      (admin → `/dashboard`, manager → `/manager`).
+- [ ] Session helper: cookie-based (same-origin via proxy), `/logout` link,
+      401 → redirect to login.
+- **Accept**: Playwright can sign in as admin/alice/bob against the local
+  stack and lands on the role page; wrong key shows the error state.
+
+## Phase 3 — Usage dashboard (`/dashboard`)
+
+- [ ] Budget banner; filters (time presets, dates, model select, user
+      multi-select, Clear All) hitting `/api/v1/dashboard/*`.
+- [ ] KPI cards (requests, tokens, cost, saved-with-comparison-select,
+      active users).
+- [ ] Charts (PF `react-charts`): hosted-vs-vendor donut, By Model / By Tool /
+      By User with metric toggles.
+- [ ] Recent Activity table (PF `react-table`), all 12 columns, live refresh,
+      row → session dialog.
+- [ ] Session-view dialog (drill-down content parity).
+- **Accept**: values equal old UI for same filters (dual-run suite); filters
+  and toggles functional.
+
+## Phase 4 — Manager (`/manager`)
+
+- [ ] Org scope toggle, time presets, summary line, org budget/saved/members
+      cards, four chart blocks, people table + person drill-down
+      (`/api/v1/org/*`).
+- **Accept**: dual-run parity on local stack (seeded org tree).
+
+## Phase 5 — My keys (`/management`)
+
+- [ ] Tabs (My keys / Create key); key table (search, status filter, page
+      size, pagination, revoke); create-key flow with reveal-once secret.
+- [ ] Key-expiry display with remaining time.
+- **Accept**: create → list → revoke round-trip on local stack matches old
+  UI behavior (allowance-races/key-controls tests as reference).
+
+## Phase 6 — Admin console (`/admin`)
+
+- [ ] Tab shell (Users, User keys, Safety Net, User quota, Model pricing,
+      Discounts, Model Restrictions) + per-tab refresh + updated timestamp.
+- [ ] Users tab: create/update form, search/status filters, roles + manager
+      assignment, key drill-down.
+- [ ] User keys tab (mint/revoke/expire).
+- [ ] Safety Net + User quota policy forms.
+- [ ] Model pricing tables + refresh + discounts + restrictions.
+- [ ] Impersonation entry point (`/admin/impersonate?as=`).
+- **Accept**: all tabs render against local stack; user create/update and
+  key mint/revoke round-trips pass; read-only parity on live gateway.
+
+## Phase 7 — Auxiliary states
+
+- [ ] `/welcome`, blocked (budget gate), coming-soon, Pricing dialog,
+      404 page.
+- **Accept**: reachable/equivalent where the old UI exposes them.
+
+## Phase 8 — Container + OpenShift deployment
+
+- [ ] Multi-stage Containerfile: node build → nginx (SPA + proxy config,
+      upstream via `UPSTREAM` env), non-root, pinned digests.
+- [ ] Manifests: Namespace `pricetag-patternfly`, Deployment, Service,
+      Route (edge TLS) on `api.emerg.pcbk.p1.openshiftapps.com`.
+- [ ] Cluster egress: echo pod → detect egress IP → add to the AWS SG for
+      8443 (with user confirmation).
+- [ ] Deploy, verify sign-in through the Route against the live gateway.
+- **Accept**: new UI served over the cluster Route with live data.
+
+## Phase 9 — Equivalence suite + report
+
+- [ ] `test/equiv/*.spec.cjs` dual-target Playwright suite (`BASE_OLD`,
+      `BASE_NEW`): login, dashboard values/filters, manager, keys, admin
+      read-only, session dialog; side-by-side screenshot report.
+- [ ] Destructive flows run only against the local stack; live gateway
+      read-only.
+- **Accept**: suite green (local both bases; live read-only).
+
+## Phase 10 — Polish + docs
+
+- [ ] Accessibility pass (PF a11y, keyboard nav, labels).
+- [ ] README (run, test, deploy); AGENTS.md project context.
+- [ ] ocr gate before every commit/push.
+
+## Standing rules
+
+- ocr review gate before every commit/push.
+- Never modify existing projects/workloads on the emerg cluster — new
+  namespace only (`pricetag-patternfly`), delete on request.
+- AWS gateway stays read-only except the planned SG egress addition;
+  destructive testing only against the local stack.
+- MCP `playwright` server: add `--ignore-https-errors` to its command in
+  `opencode.json` (project) so future sessions can drive the self-signed
+  gateway directly.

@@ -1,0 +1,9 @@
+- generic [ref=e2]:
+  - heading "PriceTag" [level=1] [ref=e3]
+  - generic [ref=e4]: Sign in with your MaaS API key
+  - generic [ref=e5]:
+    - generic [ref=e6]: API Key
+    - textbox "API Key" [active] [ref=e7]:
+      - /placeholder: sk-oai-...
+    - button "Sign In" [ref=e8] [cursor=pointer]
+  - generic [ref=e9]: Your key was provided by your team lead.

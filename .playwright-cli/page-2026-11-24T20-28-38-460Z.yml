@@ -1,0 +1,137 @@
+- main [ref=f1e2]:
+  - generic [ref=f1e3]:
+    - link [ref=f1e4] [cursor=pointer]:
+      - /url: /dashboard
+      - text: Price
+      - emphasis [ref=f1e5]: Tag
+    - navigation [ref=f1e6]:
+      - link "Usage" [ref=f1e7] [cursor=pointer]:
+        - /url: /dashboard
+      - link "My team" [ref=f1e8] [cursor=pointer]:
+        - /url: /manager
+      - link "My keys" [ref=f1e9] [cursor=pointer]:
+        - /url: /management
+      - link "Admin" [ref=f1e10] [cursor=pointer]:
+        - /url: /admin
+    - generic [ref=f1e11]:
+      - generic [ref=f1e12]: • 3:28:38 PM
+      - button "Refresh" [ref=f1e13] [cursor=pointer]
+      - link "My view as user" [ref=f1e14] [cursor=pointer]:
+        - /url: /admin/impersonate?as=admin
+      - button "Pricing" [ref=f1e15] [cursor=pointer]
+      - generic [ref=f1e16]: Administrator (super admin)
+      - link "Sign out" [ref=f1e17] [cursor=pointer]:
+        - /url: /logout
+  - region "Monthly budget" [ref=f1e18]:
+    - strong [ref=f1e19]: Monthly budget
+    - paragraph [ref=f1e20]: Administrator — exempt from the USD budget gate
+  - generic [ref=f1e21]:
+    - generic [ref=f1e22]: Filters
+    - generic [ref=f1e23]:
+      - generic [ref=f1e24]: "Time:"
+      - generic [ref=f1e25]:
+        - button "24h" [ref=f1e26] [cursor=pointer]
+        - button "7d" [ref=f1e27] [cursor=pointer]
+        - button "30d" [ref=f1e28] [cursor=pointer]
+        - button "MTD" [ref=f1e29] [cursor=pointer]
+      - textbox [ref=f1e30]: 2026-11-01
+      - generic [ref=f1e31]: to
+      - textbox [ref=f1e32]: 2026-11-24
+    - generic [ref=f1e34]:
+      - generic [ref=f1e35]: "Model:"
+      - combobox [ref=f1e36] [cursor=pointer]:
+        - option "All" [selected]
+        - option "gpt-5.4-mini"
+    - generic [ref=f1e37]:
+      - generic [ref=f1e38]: "User:"
+      - button "All ▼" [ref=f1e39] [cursor=pointer]:
+        - generic [ref=f1e40]: All
+        - generic [ref=f1e41]: ▼
+    - button "Clear All" [ref=f1e43] [cursor=pointer]
+  - generic [ref=f1e44]:
+    - generic [ref=f1e45]:
+      - generic [ref=f1e46]: Total Requests
+      - generic [ref=f1e47]: "1"
+    - generic [ref=f1e48]:
+      - generic [ref=f1e49]: Total Tokens
+      - generic [ref=f1e50]: "16"
+    - generic [ref=f1e51]:
+      - generic [ref=f1e52]: Estimated Cost
+      - generic [ref=f1e53]: $0.00
+    - generic [ref=f1e54]:
+      - generic [ref=f1e55]: Saved · Hosted Models
+      - generic [ref=f1e56]: $0.00
+      - generic [ref=f1e57]:
+        - text: vs
+        - combobox [ref=f1e58] [cursor=pointer]:
+          - option "claude-fable-5"
+          - option "gpt-5.5"
+          - option "claude-opus-4-8" [selected]
+          - option "claude-opus-5"
+          - option "claude-sonnet-4-6"
+          - option "gpt-5.4"
+          - option "gpt-4o"
+          - option "claude-haiku-4-5"
+    - generic [ref=f1e59]:
+      - generic [ref=f1e60]: Active Users
+      - generic [ref=f1e61]: "1"
+  - generic [ref=f1e62]:
+    - generic [ref=f1e63]:
+      - heading "Token Usage · Hosted vs Vendor" [level=2] [ref=f1e64]
+      - generic [ref=f1e66]:
+        - generic "Hosted — 16" [ref=f1e67]
+        - generic "Vendor — 0" [ref=f1e70]
+    - generic [ref=f1e74]:
+      - heading "By Model" [level=2] [ref=f1e75]
+      - generic "gpt-5.4-mini — 16" [ref=f1e78]
+      - generic [ref=f1e81]:
+        - button "Cost" [ref=f1e82] [cursor=pointer]
+        - button "Tokens" [ref=f1e83] [cursor=pointer]
+        - button "Requests" [ref=f1e84] [cursor=pointer]
+    - generic [ref=f1e85]:
+      - heading "By Tool (Tokens)" [level=2] [ref=f1e86]
+      - generic "curl — 16" [ref=f1e89]
+      - generic [ref=f1e92]:
+        - button "Tokens" [ref=f1e93] [cursor=pointer]
+        - button "Requests" [ref=f1e94] [cursor=pointer]
+        - button "Users" [ref=f1e95] [cursor=pointer]
+    - generic [ref=f1e96]:
+      - heading "By User (Top 5)" [level=2] [ref=f1e97]
+      - generic "Alice — Free" [ref=f1e100]
+      - generic [ref=f1e103]:
+        - button "Cost" [ref=f1e104] [cursor=pointer]
+        - button "Tokens" [ref=f1e105] [cursor=pointer]
+        - button "Requests" [ref=f1e106] [cursor=pointer]
+  - generic [ref=f1e107]:
+    - heading "Recent Activity (live)" [level=2] [ref=f1e108]
+    - table [ref=f1e110]:
+      - rowgroup [ref=f1e111]:
+        - row [ref=f1e112]:
+          - columnheader "Time" [ref=f1e113]
+          - columnheader "User" [ref=f1e114]
+          - columnheader "Client" [ref=f1e115]
+          - columnheader "Model" [ref=f1e116]
+          - columnheader "Provider" [ref=f1e117]
+          - columnheader "Status" [ref=f1e118]
+          - columnheader "Input" [ref=f1e119]
+          - columnheader "Output" [ref=f1e120]
+          - columnheader "Cached" [ref=f1e121]
+          - columnheader "Cache Write" [ref=f1e122]
+          - columnheader "Total" [ref=f1e123]
+          - columnheader "Cost" [ref=f1e124]
+      - rowgroup [ref=f1e125]:
+        - row [ref=f1e126]:
+          - cell "1h ago" [ref=f1e127]
+          - cell "Alice alice" [ref=f1e128]:
+            - generic [ref=f1e129]: Alice
+            - generic [ref=f1e130]: alice
+          - cell "curl" [ref=f1e131]
+          - cell "gpt-5.4-mini" [ref=f1e132]
+          - cell "openai" [ref=f1e133]
+          - cell "200" [ref=f1e134]
+          - cell "12" [ref=f1e135]
+          - cell "4" [ref=f1e136]
+          - cell "0" [ref=f1e137]
+          - cell "0" [ref=f1e138]
+          - cell "16" [ref=f1e139]
+          - cell "$0.00" [ref=f1e140]

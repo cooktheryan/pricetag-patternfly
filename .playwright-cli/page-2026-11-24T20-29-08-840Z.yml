@@ -1,0 +1,14 @@
+- generic [ref=f3e2]:
+  - banner [ref=f3e3]:
+    - link [ref=f3e4] [cursor=pointer]:
+      - /url: /dashboard
+      - text: Price
+      - emphasis [ref=f3e5]: Tag
+    - navigation [ref=f3e6]:
+      - link "Usage" [ref=f3e7] [cursor=pointer]:
+        - /url: /dashboard
+      - link "My keys" [ref=f3e8] [cursor=pointer]:
+        - /url: /management
+    - link "Sign out" [ref=f3e10] [cursor=pointer]:
+      - /url: /logout
+  - heading "My keys" [level=1] [ref=f3e11]
