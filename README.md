@@ -105,6 +105,7 @@ standalone stack; never run them against the live gateway.
 PatternFly 6 supplies labelled form controls, table semantics, focus
 management, and modal focus traps. The SPA adds page-level h1 headings,
 aria-labels on every table and chart, keyboard-operable member/key rows, and
-role=tabpanel labels for the admin tabs. The equivalence screenshots are the
-visual regression reference; a dedicated axe pass is listed as follow-up in
-the plan.
+role=tabpanel labels for the admin tabs. `test/equiv/a11y.spec.cjs` runs
+axe-core against login and the dashboard/manager/keys/admin surfaces; it is
+part of `npm run test:equiv` and has no serious/critical violations locally
+or on the live Route.

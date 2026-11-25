@@ -328,23 +328,23 @@
 }
 
 .pf-dashboard-provider--anthropic {
-  color: var(--pf-t--global--color--nonstatus--orange--default);
+  color: var(--pf-t--global--color--nonstatus--orange--400);
 }
 
 .pf-dashboard-provider--openai {
-  color: var(--pf-t--global--color--nonstatus--green--default);
+  color: var(--pf-t--global--color--nonstatus--green--400);
 }
 
 .pf-dashboard-provider--other {
-  color: var(--pf-t--global--color--nonstatus--teal--default);
+  color: var(--pf-t--global--color--nonstatus--teal--400);
 }
 
 .pf-dashboard-cached {
-  color: var(--pf-t--global--color--nonstatus--teal--default);
+  color: var(--pf-t--global--color--nonstatus--teal--400);
 }
 
 .pf-dashboard-cache-write {
-  color: var(--pf-t--global--color--nonstatus--purple--default);
+  color: var(--pf-t--global--color--nonstatus--purple--400);
 }
 
 @media (max-width: 1200px) {

@@ -1608,7 +1608,12 @@ export function AdminPage() {
           aria-label="Admin sections"
         >
           {TABS.map((entry) => (
-            <Tab key={entry.id} eventKey={TABS.indexOf(entry)} title={entry.label} />
+            <Tab key={entry.id} eventKey={TABS.indexOf(entry)} title={entry.label}>
+              {/* PF renders the aria-controls target only when the Tab has
+                  children; the visible content lives in the labelled panel
+                  below so inactive tabs do not fetch their data. */}
+              <span aria-hidden="true" />
+            </Tab>
           ))}
         </Tabs>
         <div role="tabpanel" aria-label={TABS[tab]?.label ?? 'Admin'} className="pf-admin-panel">

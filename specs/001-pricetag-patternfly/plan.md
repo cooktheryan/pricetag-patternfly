@@ -132,10 +132,12 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
   then restored 600), quota override set ($25) and removed, model-rate save
   + "Pricing refreshed", and discount policy save + refresh all succeeded in
   the admin UI. User create/update and role/manager PATCH were verified in
-  6a; onboarding-key mint returned a reveal-once secret. Admin key revoke
-  remains code-verified only: the local standalone maas path has no platform
-  group scope (`503 group scope unavailable for key operations`), while the
-  live gateway provides it. Read-only live parity follows in Phase 9.
+  6a; onboarding-key mint returned a reveal-once secret. Admin key revoke is
+  code-verified. The local stack lacks the live platform-group + maas key
+  store: a temporary local platform-group fallback reached maas, which
+  returned 404 for the admin-minted key (stub limitation); the live gateway
+  revokes correctly. Self-key revoke is covered in Phase 5. Read-only live
+  parity follows in Phase 9.
 
 ## Phase 7 — Auxiliary states
 
@@ -189,18 +191,21 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 - [x] Destructive flows run only against the local stack; the live run is
       read-only (login, navigation, non-submitted dialogs).
 - **Accept**: suite green (local both bases; live read-only). ✔ local:
-      13 passed, 1 skipped (the local old UI redirects `/management` to
-      `/account`; the SPA keys surface is covered). Live read-only run against
-      the gateway + Route with `EQUIV_KEY`: 13 passed, 1 skipped (old keys),
-      no screenshots/traces. Credential handling is opt-in for the seeded
-      local key and produces no live artifacts.
+      16 passed, 2 skipped (both skips are axe on the legacy project; the old
+      keys surface now follows the `/account?tab=keys` redirect and passes).
+      Live read-only run against the gateway + Route with `EQUIV_KEY`: 16
+      passed, 2 skipped, no screenshots/traces. Credential handling is opt-in
+      for the seeded local key and produces no live artifacts.
 
 ## Phase 10 — Polish + docs
 
 - [x] Accessibility pass: PF controls with FormGroup labels/ids, labelled
       tables, charts with ariaTitle/ariaDesc, modal labels/focus traps,
-      keyboard-operable member/key rows, admin tabpanel labels. A dedicated
-      axe automation pass is the remaining follow-up (not yet wired).
+      keyboard-operable member/key rows, and admin tabpanel labels. Added
+      automated axe coverage (`test/equiv/a11y.spec.cjs`) for login and the
+      dashboard/manager/keys/admin surfaces; no serious/critical violations
+      locally or live. Fixed the admin Tab `aria-controls` target and the
+      light-theme contrast of client/provider/table accent text.
 - [x] README (run, test, deploy, accessibility) and AGENTS.md project
       context updated with the live Route, Quay image, and equivalence
       suite.

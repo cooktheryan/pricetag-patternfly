@@ -7,7 +7,7 @@ import {
   friendlyClient,
   statusCell,
   timeAgo,
-  toolColor,
+  toolTextColor,
 } from '../../lib/dashboard'
 
 function providerClass(provider: string): string {
@@ -101,7 +101,7 @@ export function RecentActivityTable({ rows }: { rows: RecentRow[] }) {
                 </Td>
                 <Td>
                   <span
-                    style={{ color: toolColor(client) }}
+                    style={{ color: toolTextColor(client) }}
                     title={row.user_agent || clientLabel}
                   >
                     {clientLabel || '—'}
