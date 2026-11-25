@@ -6,11 +6,26 @@ kind: Deployment
 metadata:
   name: pricetag-patternfly
   namespace: pricetag-patternfly
+  annotations:
+    openshift.io/description: PriceTag metering UI
+    openshift.io/display-name: PriceTag
   labels:
     app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/instance: pricetag-patternfly
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: ui
     app.kubernetes.io/part-of: pricetag-patternfly
+    app.kubernetes.io/managed-by: pricetag-deploy
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 600
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: pricetag-patternfly
@@ -18,21 +33,34 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: pricetag-patternfly
+        app.kubernetes.io/instance: pricetag-patternfly
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/component: ui
         app.kubernetes.io/part-of: pricetag-patternfly
+        app.kubernetes.io/managed-by: pricetag-deploy
     spec:
+      serviceAccountName: pricetag-patternfly
       automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: pricetag-patternfly
       containers:
         - name: ui
           # The image ENTRYPOINT (/usr/local/bin/pricetag-entrypoint) renders
           # the mounted nginx ConfigMap and execs nginx; no command override.
-          # Both the cluster-local registry and the public Quay repository
-          # need no image pull secret.
+          # The image is pinned by digest by deploy/deploy.sh.
           image: "${IMAGE}"
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
@@ -51,6 +79,7 @@ spec:
               value: "${UPSTREAM_TLS_NAME}"
           securityContext:
             allowPrivilegeEscalation: false
+            privileged: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             capabilities:
@@ -72,45 +101,59 @@ spec:
             - name: gateway-ca
               mountPath: /etc/nginx/ca
               readOnly: true
-          # Readiness traverses the proxy to the gateway, so a bad CA, an
-          # unreachable upstream, or a broken TLS chain marks the pod
-          # unready instead of sending users to a broken page. An
-          # unauthenticated /whoami is a 302, which counts as success.
+          # Health checks are deliberately local. A gateway outage must not
+          # mark every pod unready/restarting; deploy.sh separately probes the
+          # gateway-backed /whoami through the Route.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /whoami
+              path: /healthz
               port: http
               scheme: HTTP
-            initialDelaySeconds: 3
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 6
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /
+              path: /healthz
               port: http
               scheme: HTTP
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            initialDelaySeconds: 10
+            periodSeconds: 20
             timeoutSeconds: 3
             failureThreshold: 3
           resources:
             requests:
               cpu: 50m
               memory: 64Mi
+              ephemeral-storage: 32Mi
             limits:
               cpu: 500m
               memory: 256Mi
+              ephemeral-storage: 128Mi
+          terminationMessagePolicy: FallbackToLogsOnError
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: cache
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: run
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 16Mi
         - name: nginx-config
           configMap:
             name: pricetag-nginx-config
+            defaultMode: 0444
         # The bundle carries the public Praxis test CA; deploy/deploy.sh
         # refreshes this ConfigMap from CA_FILE for the target environment.
         - name: gateway-ca

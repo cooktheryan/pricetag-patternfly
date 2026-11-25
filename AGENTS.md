@@ -11,7 +11,8 @@ Plan: `specs/001-pricetag-patternfly/plan.md`
 - PatternFly 6 (`@patternfly/react-core@^6.7`, `react-table`, `react-charts`,
   `react-icons`) — Red Hat branding, default light theme
 - react-router mirroring the legacy URL space
-- Deploy: nginx container (SPA + same-origin reverse proxy), OpenShift Route
+- Deploy: UBI9 nginx container (SPA + same-origin reverse proxy), 2 replicas
+  with PDB/ServiceAccount, OpenShift Route
 
 ## Status
 

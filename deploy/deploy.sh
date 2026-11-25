@@ -88,7 +88,9 @@ case "$UPSTREAM" in
 esac
 
 oc apply -f "$ROOT/deploy/k8s/namespace.yaml"
+oc -n "$NS" apply -f "$ROOT/deploy/k8s/serviceaccount.yaml"
 oc -n "$NS" apply -f "$ROOT/deploy/k8s/service.yaml"
+oc -n "$NS" apply -f "$ROOT/deploy/k8s/pdb.yaml"
 # The nginx/CA applies happen after the NetworkPolicy render validates below,
 # so a bad upstream/label cannot leave half-updated resources behind.
 # Render the NetworkPolicy's gateway egress from the same UPSTREAM the proxy

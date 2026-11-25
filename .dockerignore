@@ -1,15 +1,14 @@
-# deploy/ is intentionally included: the Containerfile copies its nginx
-# template, entrypoint, and shared validation library.
 .git
 .github
-node_modules
-dist
-.playwright-cli
+.gitignore
 .playwright-mcp
-docs/reference
-specs
 AGENTS.md
 README.md
-opencode.json
-*.log
-.DS_Store
+docs
+specs
+test
+test-results
+playwright.config.cjs
+node_modules
+dist
+deploy/k8s
