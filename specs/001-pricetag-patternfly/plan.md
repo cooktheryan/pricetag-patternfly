@@ -213,6 +213,25 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
       used the user-approved `OCR_GATE_BYPASS=1` after repeated
       false-positive/circular findings; all other commits passed the gate.
 
+## Security hardening (2026-11-25)
+
+- [x] nginx CSP/HSTS/nosniff/frame/referrer/permissions/COOP/CORP headers on
+      every response; hash assets inherit them.
+- [x] Proxy clears client identity headers and normalizes X-Forwarded-For;
+      session POSTs require same-origin Fetch Metadata and an exact Origin.
+- [x] Dev proxy rewrites Origin only for its own 5173 origin (no CSRF bypass
+      for other localhost ports).
+- [x] NetworkPolicy: ingress only from the ingress namespace/nodes on 8080;
+      egress only DNS + gateway 8443. Pod remains non-root/read-only/drop-ALL/
+      no SA token.
+- [x] Quay image deployed by manifest digest; base images pinned.
+- [x] Minted keys moved to closure-like refs in both key surfaces; no React
+      state/DOM/storage; reveal auto-clears.
+- [x] `npm audit` clean; no dangerous DOM/storage patterns or committed
+      secrets found; Quay token note tightened to 0600.
+- [ ] Remaining supply-chain follow-up: automated container-image CVE scan
+      (Trivy or equivalent) against the pinned runtime base.
+
 ## Standing rules
 
 - ocr review gate before every commit/push.

@@ -1,0 +1,43 @@
+# Template rendered by deploy/deploy.sh. Restrict the UI pod to ingress from
+# the OpenShift router and egress only DNS and the configured gateway's
+# resolved IPv4 address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pricetag-patternfly
+  namespace: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pricetag-patternfly
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Ingress router. OpenShift's OVN CNI allows kubelet health probes
+    # independently of this policy; no broad cluster CIDR is granted.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Cluster DNS only (a hostname upstream is re-resolved by nginx).
+    - to:
+        - ipBlock:
+            cidr: ${DNS_CIDR}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+__GATEWAY_BLOCKS__
+      ports:
+        - protocol: TCP
+          port: ${GATEWAY_PORT}

@@ -3,13 +3,18 @@ import { useLocation, useNavigate } from 'react-router'
 import {
   ActionList,
   ActionListItem,
+  Avatar,
   Button,
+  Dropdown,
+  DropdownItem,
+  DropdownList,
   Form,
   Masthead,
   MastheadBrand,
   MastheadContent,
   MastheadMain,
   MastheadToggle,
+  MenuToggle,
   Modal,
   ModalFooter,
   Nav,
@@ -25,8 +30,10 @@ import {
   ToolbarItem,
 } from '@patternfly/react-core'
 import BarsIcon from '@patternfly/react-icons/dist/esm/icons/bars-icon'
+import CaretDownIcon from '@patternfly/react-icons/dist/esm/icons/caret-down-icon'
 import { Brand } from './Brand'
 import { Clock } from './Clock'
+import { SettingsMenu } from './SettingsMenu'
 import { useSession } from '../lib/session'
 import { gatewayUrl } from '../lib/gateway'
 
@@ -52,9 +59,20 @@ const NAV_ENTRIES: NavEntry[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isSignOutOpen, setIsSignOutOpen] = useState(false)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { who } = useSession()
+  const displayName = who?.display_name || who?.user || ''
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '?'
+  const roleLabel = who?.isSuperAdmin ? ' (super admin)' : who?.isAdmin ? ' (admin)' : ''
 
   const entries = NAV_ENTRIES.filter(
     (e) =>
@@ -97,19 +115,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <ToolbarItem>
                 <Clock />
               </ToolbarItem>
+              <ToolbarItem>
+                <SettingsMenu />
+              </ToolbarItem>
               {who?.user && (
                 <ToolbarItem>
-                  <span>
-                    {who.display_name || who.user}
-                    {who.isSuperAdmin ? ' (super admin)' : who.isAdmin ? ' (admin)' : ''}
-                  </span>
+                  <Dropdown
+                    isOpen={isUserMenuOpen}
+                    onOpenChange={setIsUserMenuOpen}
+                    onSelect={() => setIsUserMenuOpen(false)}
+                    popperProps={{ position: 'end' }}
+                    toggle={(toggleRef) => (
+                      <MenuToggle
+                        ref={toggleRef}
+                        variant="plain"
+                        isExpanded={isUserMenuOpen}
+                        onClick={() => setIsUserMenuOpen((open) => !open)}
+                        icon={<Avatar initials={initials} alt="" size="sm" />}
+                      >
+                        <span className="app-user-menu-name">
+                          {displayName}
+                          {roleLabel}
+                        </span>
+                        <CaretDownIcon className="app-user-menu-caret" />
+                      </MenuToggle>
+                    )}
+                  >
+                    <DropdownList>
+                      <DropdownItem isDisabled description={who.user}>
+                        Signed in as
+                      </DropdownItem>
+                      <DropdownItem onClick={() => navigate('/account')}>My account</DropdownItem>
+                      <DropdownItem onClick={() => setIsSignOutOpen(true)}>Log out</DropdownItem>
+                    </DropdownList>
+                  </Dropdown>
                 </ToolbarItem>
               )}
-              <ToolbarItem>
-                <Button variant="link" onClick={() => setIsSignOutOpen(true)}>
-                  Sign out
-                </Button>
-              </ToolbarItem>
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
@@ -145,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <Page masthead={masthead} sidebar={sidebar}>
       {children}
       <Modal
-        title="Sign out"
+        title="Log out"
         isOpen={isSignOutOpen}
         onClose={() => setIsSignOutOpen(false)}
         variant="small"
@@ -156,7 +197,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             gateway endpoint is root-relative by contract, like every
             other gateway path the app uses. */}
         <Form action={gatewayUrl('logout')} method="post">
-          <p>Sign out of this browser session?</p>
+          <p>Log out of this browser session?</p>
           <ModalFooter>
             <ActionList>
               <ActionListItem>
@@ -166,7 +207,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </ActionListItem>
               <ActionListItem>
                 <Button key="continue" variant="primary" type="submit">
-                  Continue
+                  Log out
                 </Button>
               </ActionListItem>
             </ActionList>

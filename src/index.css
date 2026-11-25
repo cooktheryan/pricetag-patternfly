@@ -4,3 +4,69 @@
   font-size: 1.1rem;
   font-weight: 500;
 }
+
+.app-login-settings {
+  position: fixed;
+  inset-block-start: var(--pf-t--global--spacer--md);
+  inset-inline-end: var(--pf-t--global--spacer--md);
+  z-index: 200;
+}
+
+/* Tool labels in the recent-activity table: dark variants for light mode,
+   bright variants for the PatternFly dark theme. */
+:root {
+  --pricetag-tool-claude: #8a5a00;
+  --pricetag-tool-codex: #2f6f2f;
+  --pricetag-tool-opencode: #005a9c;
+  --pricetag-tool-pi: #5e40be;
+  --pricetag-tool-curl: #4d4d4d;
+  --pricetag-tool-other: #006666;
+}
+
+:root.pf-v6-theme-dark {
+  --pricetag-tool-claude: #e3b341;
+  --pricetag-tool-codex: #7ee787;
+  --pricetag-tool-opencode: #79c0ff;
+  --pricetag-tool-pi: #d2a8ff;
+  --pricetag-tool-curl: #c9d1d9;
+  --pricetag-tool-other: #56d4dd;
+
+  /* PatternFly charts ship light-theme token fallbacks; give the dark theme
+     readable axis labels, ticks, and grid/axis strokes. */
+  --pf-v6-chart-global--label--Fill: var(--pf-t--global--text--color--regular);
+  --pf-v6-chart-axis--tick-label--Fill: var(--pf-t--global--text--color--regular);
+  --pf-v6-chart-axis--axis--stroke--Color: var(--pf-t--global--border--color--default);
+  --pf-v6-chart-axis--grid--stroke--Color: var(--pf-t--global--border--color--subtle);
+  --pf-v6-chart-axis--tick--stroke--Color: var(--pf-t--global--border--color--default);
+}
+
+
+.app-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+  min-width: 17rem;
+}
+
+.app-settings-section h3 {
+  margin-block-end: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.app-settings-section .pf-v6-c-toggle-group {
+  flex-wrap: wrap;
+}
+
+.app-user-menu-name {
+  display: inline-block;
+  max-width: 19rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.app-user-menu-caret {
+  margin-inline-start: var(--pf-t--global--spacer--xs);
+}
