@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { gatewayUrl } from './gateway'
 
 /** Shape of the gateway's /whoami response. */
 export interface WhoAmI {
@@ -23,15 +24,15 @@ interface SessionState {
   who: WhoAmI | null
   status: SessionStatus
   loading: boolean
-  /** Re-reads /whoami and resolves with the fresh identity (null if none). */
-  refresh: () => Promise<WhoAmI | null>
+  /** Re-reads /whoami and resolves with the fresh session state. */
+  refresh: () => Promise<{ status: SessionStatus; who: WhoAmI | null }>
 }
 
 const SessionContext = createContext<SessionState>({
   who: null,
   status: 'loading',
   loading: true,
-  refresh: async () => null,
+  refresh: async () => ({ status: 'unauthed', who: null }),
 })
 
 /**
@@ -70,7 +71,7 @@ function parseWhoAmI(data: unknown): WhoAmI | null {
  */
 async function fetchWhoAmI(): Promise<{ status: SessionStatus; who: WhoAmI | null }> {
   try {
-    const res = await fetch('/whoami', {
+    const res = await fetch(gatewayUrl('whoami'), {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })
@@ -114,12 +115,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const gen = ++generation.current
     const result = await fetchWhoAmI()
-    if (gen !== generation.current) {
-      return result.who
+    if (gen === generation.current) {
+      setWho(result.who)
+      setStatus(result.status)
     }
-    setWho(result.who)
-    setStatus(result.status)
-    return result.who
+    return result
   }, [])
 
   return (

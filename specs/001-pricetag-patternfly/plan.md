@@ -111,6 +111,12 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 - [ ] Multi-stage Containerfile: node build → nginx (SPA + proxy config,
       upstream via `UPSTREAM` env), non-root, pinned digests.
+- [ ] nginx must serve the SPA with a history fallback (all non-file GETs
+      → index.html) and reverse-proxy the gateway paths (`/api`, `/login`,
+      `/logout`, `/whoami`, `/admin/impersonate`) so the native form POSTs
+      and their 302 destinations land on SPA routes — the login/logout
+      contract depends on it (test both the success and invalid-key
+      redirects through the Route).
 - [ ] Manifests: Namespace `pricetag-patternfly`, Deployment, Service,
       Route (edge TLS) on `api.emerg.pcbk.p1.openshiftapps.com`.
 - [ ] Cluster egress: echo pod → detect egress IP → add to the AWS SG for

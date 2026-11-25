@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navigate, useSearchParams } from 'react-router'
 import {
   ActionGroup,
   Button,
@@ -10,8 +11,9 @@ import {
   LoginPage as PFLoginPage,
   TextInput,
 } from '@patternfly/react-core'
-import { useSearchParams } from 'react-router'
 import logo from '../assets/red-hat-logo.svg'
+import { useSession } from '../lib/session'
+import { gatewayUrl } from '../lib/gateway'
 
 /**
  * Legacy parity (internal/dashboard/login.html): a single masked api_key
@@ -25,12 +27,27 @@ export function LoginPage() {
   const [apiKey, setApiKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [params] = useSearchParams()
+  const { who, status } = useSession()
   const error = params.get('error') === 'invalid' ? 'Invalid API key.' : ''
+
+  // An already-authenticated user has no business on the credential form;
+  // send them to their role's landing page.
+  if (status === 'authed' && who?.user) {
+    return (
+      <Navigate
+        to={who.isSuperAdmin || who.isAdmin ? '/dashboard' : who.isManager ? '/manager' : '/account'}
+        replace
+      />
+    )
+  }
 
   return (
     <PFLoginPage brandImgSrc={logo} brandImgAlt="Red Hat" loginTitle="Log in to your account">
+      {/* Gateway endpoints are root-relative by contract (the dev proxy and
+          the production nginx reverse proxy both forward them from the
+          serving origin), matching every fetch in the app. */}
       <Form
-        action={`${import.meta.env.BASE_URL}login`}
+        action={gatewayUrl('login')}
         method="post"
         onSubmit={() => setBusy(true)}
       >

@@ -14,16 +14,19 @@ const upstreamInsecure =
 
 // The gateway's same-origin CSRF check on session-changing POSTs (/login,
 // /logout, /admin/impersonate) compares the Origin header against its
-// MANAGEMENT_PUBLIC_ORIGIN. This dev server fronts a different origin, so the
-// forwarded Origin is rewritten to the value the upstream expects. CSRF
-// protection is preserved: the rewrite only affects requests that already
-// reached this loopback-bound dev server, and the browser's Sec-Fetch-Site
-// header (which the gateway also checks and which cannot be forged
-// cross-site) passes through untouched. This is a developer-controlled
-// setting with the same trust level as UPSTREAM itself, and it is NOT
-// derived from UPSTREAM because they legitimately differ: the local stack
-// is reached at http://127.0.0.1:8080 but expects Origin
-// http://localhost:8080. For the live gateway, use
+// MANAGEMENT_PUBLIC_ORIGIN AND rejects any request whose Sec-Fetch-Site is
+// "cross-site" (internal/handler/auth.go). This dev server fronts a
+// different origin, so the forwarded Origin is rewritten to the value the
+// upstream expects. The rewrite does not weaken the gateway's CSRF
+// posture: a malicious cross-site page driving the developer's browser at
+// this loopback-bound server still arrives with Sec-Fetch-Site: cross-site,
+// which is forwarded untouched (fetch/http-proxy cannot strip it) and is
+// rejected by the gateway before any state changes. Only requests that are
+// same-origin to this dev server (the SPA itself) pass both checks. This
+// is a developer-controlled setting with the same trust level as UPSTREAM
+// itself, and it is NOT derived from UPSTREAM because they legitimately
+// differ: the local stack is reached at http://127.0.0.1:8080 but expects
+// Origin http://localhost:8080. For the live gateway, use
 // https://32.198.91.108:8443.
 const upstreamPublicOrigin = process.env.UPSTREAM_PUBLIC_ORIGIN ?? 'http://localhost:8080'
 

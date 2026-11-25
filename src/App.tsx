@@ -1,4 +1,4 @@
-import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
+import { Link, Navigate, Outlet, Route, Routes } from 'react-router'
 import { Bullseye, Button, EmptyState, EmptyStateBody, Spinner } from '@patternfly/react-core'
 import { SessionProvider, useSession } from './lib/session'
 import { AppShell } from './components/AppShell'
@@ -12,7 +12,6 @@ import { AccountPage } from './pages/AccountPage'
 /** Gate shell routes on an established gateway session. */
 function RequireSession() {
   const { who, status, refresh } = useSession()
-  const location = useLocation()
 
   if (status === 'loading') {
     return (
@@ -36,7 +35,7 @@ function RequireSession() {
     )
   }
   if (!who?.user) {
-    return <Navigate to="/login" replace state={{ from: location }} />
+    return <Navigate to="/login" replace />
   }
   return (
     <AppShell>
@@ -91,11 +90,23 @@ function RequireKeyService({ children }: { children: React.ReactNode }) {
  */
 function LandingRedirect() {
   const { who, status } = useSession()
-  if (status === 'loading' || status === 'error') {
+
+  if (status === 'authed') {
+    const isAdmin = who?.isAdmin === true || who?.isSuperAdmin === true
+    return <Navigate to={isAdmin ? '/dashboard' : '/account'} replace />
+  }
+  if (status === 'unauthed') {
+    return <Navigate to="/login" replace />
+  }
+  if (status === 'error') {
+    // The /dashboard route's session gate owns the retry UI.
     return <Navigate to="/dashboard" replace />
   }
-  const isAdmin = who?.isAdmin === true || who?.isSuperAdmin === true
-  return <Navigate to={isAdmin ? '/dashboard' : '/account'} replace />
+  return (
+    <Bullseye>
+      <Spinner size="xl" />
+    </Bullseye>
+  )
 }
 
 function NotFoundPage() {

@@ -4,6 +4,7 @@ import {
   ActionList,
   ActionListItem,
   Button,
+  Form,
   Masthead,
   MastheadBrand,
   MastheadContent,
@@ -27,6 +28,7 @@ import BarsIcon from '@patternfly/react-icons/dist/esm/icons/bars-icon'
 import { Brand } from './Brand'
 import { Clock } from './Clock'
 import { useSession } from '../lib/session'
+import { gatewayUrl } from '../lib/gateway'
 
 interface NavEntry {
   to: string
@@ -50,11 +52,9 @@ const NAV_ENTRIES: NavEntry[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isSignOutOpen, setIsSignOutOpen] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
-  const [signOutError, setSignOutError] = useState('')
   const navigate = useNavigate()
   const location = useLocation()
-  const { who, status, refresh } = useSession()
+  const { who } = useSession()
 
   const entries = NAV_ENTRIES.filter(
     (e) =>
@@ -67,39 +67,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   /**
    * Legacy parity: signing out is a two-step confirmation
    * (session_confirmation.go). GET /logout renders the dialog; POST /logout
-   * clears the cookie and redirects to /login. The SPA renders its own
-   * dialog and issues the POST directly. The redirect response is opaque
-   * to fetch, so the outcome is taken from the authoritative source: the
-   * /whoami re-read. A surviving session means the gateway did not sign
-   * the user out; an error means it could not be reached.
+   * clears the cookie and redirects to /login. Like the legacy dialog, the
+   * SPA's Continue button submits a native form POST to /logout and lets
+   * the browser follow the gateway's redirect — no fetch, no opaque
+   * response to interpret.
    */
-  async function handleSignOut() {
-    setSigningOut(true)
-    setSignOutError('')
-    try {
-      await fetch('/logout', {
-        method: 'POST',
-        credentials: 'same-origin',
-        redirect: 'manual',
-      })
-    } catch {
-      setSignOutError('The gateway could not be reached.')
-      setSigningOut(false)
-      return
-    }
-    await refresh()
-    setSigningOut(false)
-    if (status === 'authed') {
-      setSignOutError('The gateway did not sign you out. Try again.')
-      return
-    }
-    if (status === 'error') {
-      setSignOutError('The gateway could not be reached.')
-      return
-    }
-    setIsSignOutOpen(false)
-    navigate('/login', { replace: true })
-  }
 
   const masthead = (
     <Masthead>
@@ -178,29 +150,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onClose={() => setIsSignOutOpen(false)}
         variant="small"
       >
-        Sign out of this browser session?
-        {signOutError !== '' && (
-          <p className="pf-v6-c-form__helper-text pf-m-error">{signOutError}</p>
-        )}
-        <ModalFooter>
-          <ActionList>
-            <ActionListItem>
-              <Button
-                key="cancel"
-                variant="link"
-                isDisabled={signingOut}
-                onClick={() => setIsSignOutOpen(false)}
-              >
-                Cancel
-              </Button>
-            </ActionListItem>
-            <ActionListItem>
-              <Button key="continue" variant="primary" isDisabled={signingOut} onClick={handleSignOut}>
-                {signingOut ? 'Signing out…' : 'Continue'}
-              </Button>
-            </ActionListItem>
-          </ActionList>
-        </ModalFooter>
+        {/* Native form POST, exactly like the legacy confirmation page:
+            the gateway answers 302 -> /login and the browser follows it
+            onto the SPA's login route with the session cleared. The
+            gateway endpoint is root-relative by contract, like every
+            other gateway path the app uses. */}
+        <Form action={gatewayUrl('logout')} method="post">
+          <p>Sign out of this browser session?</p>
+          <ModalFooter>
+            <ActionList>
+              <ActionListItem>
+                <Button key="cancel" variant="link" type="button" onClick={() => setIsSignOutOpen(false)}>
+                  Cancel
+                </Button>
+              </ActionListItem>
+              <ActionListItem>
+                <Button key="continue" variant="primary" type="submit">
+                  Continue
+                </Button>
+              </ActionListItem>
+            </ActionList>
+          </ModalFooter>
+        </Form>
       </Modal>
     </Page>
   )
