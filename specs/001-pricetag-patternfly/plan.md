@@ -15,31 +15,49 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 - [x] Route map from `cmd/main.go`; API surface list.
 - [x] Spec written.
 
-## Phase 1 — Scaffold the app
+## Phase 1 — Scaffold the app (done)
 
-- [ ] `npm create vite@latest . -- --template react-ts`; add
+- [x] `npm create vite@latest . -- --template react-ts`; add
       `@patternfly/react-core@^6.7`, `@patternfly/react-table`,
       `@patternfly/react-charts`, `@patternfly/react-icons`, `react-router`.
-- [ ] App shell: PF6 `Page` + `Masthead` (Red Hat logo lockup + "PriceTag"
+- [x] App shell: PF6 `Page` + `Masthead` (Red Hat logo lockup + "PriceTag"
       product name), `PageSidebar` navigation (Usage / My team / My keys /
-      Admin), role-aware nav, sign-out, live clock, Refresh.
-- [ ] Vite dev proxy: `/api`, `/login`, `/logout`, `/admin/impersonate` →
-      `TARGET` env (default `http://127.0.0.1:8080` local stack).
-- [ ] Local old stack: `podman compose -f docker-compose.standalone.yaml
-      up --build` in `~/git/pricetag-metering` (scripts/ scripts in
-      package.json).
+      Admin), role-aware nav, sign-out, live clock. (Refresh buttons are
+      per-page; they land with the pages in Phases 3–6.)
+- [x] Vite dev proxy: `/api`, `/login`, `/logout`, `/admin/impersonate`,
+      `/whoami`, `/me`, `/oauth` → `UPSTREAM` env (default
+      `http://127.0.0.1:8080` local stack). Session-changing POSTs need the
+      forwarded `Origin` rewritten to the gateway's `MANAGEMENT_PUBLIC_ORIGIN`
+      (its same-origin CSRF check) — set via `UPSTREAM_PUBLIC_ORIGIN`.
+- [x] Local old stack: `podman compose -f docker-compose.standalone.yaml
+      up --build` in `~/git/pricetag-metering`, then
+      `tools/local/bootstrap.sh` (shim `docker compose`→`podman compose`,
+      `COMPOSE_PROJECT_NAME=pricetag-metering`) for the seeded super-admin.
 - **Accept**: shell renders at localhost:5173 with PF branding; nav routes
-  resolve; proxy reaches the local stack's `/health`.
+  resolve; proxy reaches the local stack's `/health`. ✔ verified 2026-11-24.
 
-## Phase 2 — Auth + login
+## Phase 2 — Auth + login (done)
 
-- [ ] `/login` page: PF card, API-key input (password), error state on
-      `?error=invalid`, submit → `POST /login`, redirect by role
-      (admin → `/dashboard`, manager → `/manager`).
-- [ ] Session helper: cookie-based (same-origin via proxy), `/logout` link,
-      401 → redirect to login.
-- **Accept**: Playwright can sign in as admin/alice/bob against the local
-  stack and lands on the role page; wrong key shows the error state.
+- [x] `/login` page: PF login layout, single masked API-key input
+      (monospace, `sk-oai-...` placeholder — legacy login.html parity),
+      error state on `?error=invalid`. Submit is a **native form POST** to
+      `/login`; the browser follows the gateway's 302 to the role
+      destination (/dashboard, /manager, /account — all SPA routes), which
+      is exactly the legacy contract and avoids ambiguous outcome
+      detection from `fetch`.
+- [x] Session helper: `SessionProvider` reads `/whoami` (user, roles,
+      display name); unauthenticated visits to shell routes redirect to
+      `/login`; sign-out is the legacy two-step confirmation rendered as a
+      PF modal (`GET /logout` dialog parity, `POST /logout` clears the
+      session).
+- [x] Role-aware nav: Usage (all), My team (`isSuperAdmin || isManager`,
+      legacy dashboard.html rule), Admin (`isSuperAdmin`). Masthead shows
+      display name + role suffix and a live clock.
+- **Accept**: sign in as local-admin-key / local-test-user-key against the
+  local stack lands on the role page; wrong key shows the error state and
+  preserves the previous session. ✔ verified 2026-11-24 (alice/bob are
+  live-gateway identities; the local stack's equivalents are the seeded
+  bootstrap keys).
 
 ## Phase 3 — Usage dashboard (`/dashboard`)
 

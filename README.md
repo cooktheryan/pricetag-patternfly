@@ -1,27 +1,61 @@
 # enmaas-patternfly
 
 PatternFly 6 rebuild of the PriceTag metering UI with Red Hat branding.
-Functional parity with the Go-served HTML UI in `redhat-et/pricetag-metering`
-(`internal/dashboard/`), deployed on OpenShift.
 
-- Spec: `specs/001-pricetag-patternfly/spec.md`
-- Plan: `specs/001-pricetag-patternfly/plan.md`
-- Old-UI reference captures: `docs/reference/` (screenshots + a11y snapshots)
+Spec and plan: `specs/001-pricetag-patternfly/`.
 
-## Quick start (once the app exists)
+## Stack
+
+- Vite 8 + React 19 + TypeScript
+- PatternFly 6 (`@patternfly/react-core`, `react-table`, `react-charts`,
+  `react-icons`)
+- react-router, URL space mirroring the legacy gateway
+
+## Develop
 
 ```sh
-# local old stack (metering + postgres + maas stub) — from a pricetag-metering clone:
-podman compose -f docker-compose.standalone.yaml up --build
+npm install
+npm run dev        # http://localhost:5173 (loopback only)
+```
 
-# dev server (proxies /api + /login to the local stack):
+The dev server proxies `/api`, `/whoami`, `/login`, `/logout`,
+`/admin/impersonate` (and friends) to the upstream PriceTag gateway.
+
+Environment:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `UPSTREAM` | `http://127.0.0.1:8080` | Gateway the proxy forwards to |
+| `UPSTREAM_PUBLIC_ORIGIN` | `http://localhost:8080` | Origin the gateway's CSRF check expects (`MANAGEMENT_PUBLIC_ORIGIN`) |
+| `UPSTREAM_INSECURE` | unset | Set `1` only for the self-signed live gateway |
+
+### Local standalone stack
+
+```sh
+cd ~/git/pricetag-metering
+podman compose -f docker-compose.standalone.yaml up --build -d
+COMPOSE_PROJECT_NAME=pricetag-metering \
+  bash <(sed 's/docker compose/podman compose/g' tools/local/bootstrap.sh)
+```
+
+Seeded login keys: `local-admin-key` (super admin), `local-test-user-key`,
+`local-returning-key`.
+
+### Live gateway (read-only)
+
+```sh
+UPSTREAM=https://32.198.91.108:8443 \
+UPSTREAM_PUBLIC_ORIGIN=https://32.198.91.108:8443 \
+UPSTREAM_INSECURE=1 \
 npm run dev
 ```
 
-## Environments
+Never run destructive flows (key create/revoke, admin writes) against the
+live gateway.
 
-- Local stack: http://127.0.0.1:8080 (hermetic, safe for destructive tests)
-- Live reference: https://32.198.91.108:8443 (read-only; credentials at
-  `~/.config/praxis-pricetag/32.198.91.108/`, 0600)
-- OpenShift: `pricetag-patternfly` namespace on
-  `api.emerg.pcbk.p1.openshiftapps.com`
+## Build
+
+```sh
+npm run build      # typecheck + production bundle in dist/
+npx oxlint         # lint
+```

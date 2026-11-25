@@ -1,0 +1,6 @@
+/* App-level tweaks only; PatternFly base.css provides the design system. */
+
+.app-brand-name {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
