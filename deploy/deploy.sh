@@ -175,6 +175,17 @@ for gateway_ip in $gateway_ips; do
   esac
   printf -v GATEWAY_BLOCKS '%s        - ipBlock:\n            cidr: %s/32\n' "$GATEWAY_BLOCKS" "$gateway_ip"
 done
+if [ "${ALLOW_PRIVATE_UPSTREAM:-0}" != "1" ]; then
+  if ! python3 - $gateway_ips <<'PY'
+import ipaddress, sys
+for value in sys.argv[1:]:
+    if not ipaddress.ip_address(value).is_global:
+        sys.exit(1)
+PY
+  then
+    fail "UPSTREAM resolves to a non-global address; set ALLOW_PRIVATE_UPSTREAM=1 for an internal gateway"
+  fi
+fi
 netpol=$(mktemp "${TMPDIR:-/tmp}/pricetag-networkpolicy.XXXXXX")
 blocks_file=$(mktemp "${TMPDIR:-/tmp}/pricetag-netpol-blocks.XXXXXX")
 printf '%s\n' "$GATEWAY_BLOCKS" > "$blocks_file"

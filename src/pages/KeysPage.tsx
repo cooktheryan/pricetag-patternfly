@@ -229,6 +229,10 @@ export function KeysPage() {
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!identity || impersonating || !keyServiceEnabled) {
+      setError('Sign in with a non-impersonated account that has key access.')
+      return
+    }
     const name = createName.trim()
     const lifetime = createLifetime.trim()
     if (!name) {
