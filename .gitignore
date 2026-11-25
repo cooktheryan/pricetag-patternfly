@@ -26,3 +26,6 @@ dist-ssr
 # Playwright MCP/CLI session artifacts
 .playwright-cli/
 .playwright-mcp/
+
+# Playwright equivalence artifacts
+test-results/
