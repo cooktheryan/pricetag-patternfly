@@ -13,6 +13,20 @@ Plan: `specs/001-pricetag-patternfly/plan.md`
 - react-router mirroring the legacy URL space
 - Deploy: nginx container (SPA + same-origin reverse proxy), OpenShift Route
 
+## Status
+
+Phases 1–9 are implemented; Phase 10 is the docs/a11y close-out. The SPA is
+live at
+https://pricetag-patternfly-pricetag-patternfly.apps.emerg.pcbk.p1.openshiftapps.com
+(namespace `pricetag-patternfly`), pulling
+`quay.io/redhat-et/patternfly:pricetag-ui` from the public Quay repo.
+
+- Equivalence suite: `npm run test:equiv` (local old gateway + SPA).
+- Local stack: `~/git/pricetag-metering` standalone compose, seeded with
+  `local-admin-key`.
+- Deployment: `deploy/README.md`; `deploy/deploy.sh` derives the Route
+  origin and refreshes the gateway CA ConfigMap.
+
 ## Reference surfaces
 
 - Old UI source: `~/git/pricetag-metering` @ `e4ba826` (`internal/dashboard/`)

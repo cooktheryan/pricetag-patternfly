@@ -175,25 +175,38 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
   `https://pricetag-patternfly-pricetag-patternfly.apps.emerg.pcbk.p1.openshiftapps.com`:
   `POST /login` → 302 `/dashboard`, `/whoami` with the session returns the
   live administrator, and the browser loads the SPA with no console errors.
-  The rollout currently pulls from the cluster's internal registry; the
-  intended image `quay.io/redhat-et/patternfly:pricetag-ui` builds and is
-  ready, pending **Write** for the `redhat-et+enmaas` robot on the public
-  `redhat-et/patternfly` repository.
+  The `redhat-et+enmaas` robot was granted **Write** on
+  `redhat-et/patternfly`; the image is published as
+  `quay.io/redhat-et/patternfly:pricetag-ui` (public) and the Deployment
+  pulls it from Quay.
 
 ## Phase 9 — Equivalence suite + report
 
-- [ ] `test/equiv/*.spec.cjs` dual-target Playwright suite (`BASE_OLD`,
-      `BASE_NEW`): login, dashboard values/filters, manager, keys, admin
-      read-only, session dialog; side-by-side screenshot report.
-- [ ] Destructive flows run only against the local stack; live gateway
-      read-only.
-- **Accept**: suite green (local both bases; live read-only).
+- [x] `test/equiv/surfaces.spec.cjs` dual-target Playwright suite
+      (`BASE_OLD`, `BASE_NEW`): login, dashboard KPIs/filters, manager org
+      view, admin read-only tabs, pricing dialog, view-as confirmation, and
+      the keys surface; side-by-side screenshot attachments + HTML report.
+- [x] Destructive flows run only against the local stack; the live run is
+      read-only (login, navigation, non-submitted dialogs).
+- **Accept**: suite green (local both bases; live read-only). ✔ local:
+      13 passed, 1 skipped (the local old UI redirects `/management` to
+      `/account`; the SPA keys surface is covered). Live read-only run against
+      the gateway + Route with `EQUIV_KEY`: 13 passed, 1 skipped (old keys),
+      no screenshots/traces. Credential handling is opt-in for the seeded
+      local key and produces no live artifacts.
 
 ## Phase 10 — Polish + docs
 
-- [ ] Accessibility pass (PF a11y, keyboard nav, labels).
-- [ ] README (run, test, deploy); AGENTS.md project context.
-- [ ] ocr gate before every commit/push.
+- [x] Accessibility pass: PF controls with FormGroup labels/ids, labelled
+      tables, charts with ariaTitle/ariaDesc, modal labels/focus traps,
+      keyboard-operable member/key rows, admin tabpanel labels. A dedicated
+      axe automation pass is the remaining follow-up (not yet wired).
+- [x] README (run, test, deploy, accessibility) and AGENTS.md project
+      context updated with the live Route, Quay image, and equivalence
+      suite.
+- [x] ocr gate before every commit/push. Two commits (Phase 8, Phase 9)
+      used the user-approved `OCR_GATE_BYPASS=1` after repeated
+      false-positive/circular findings; all other commits passed the gate.
 
 ## Standing rules
 

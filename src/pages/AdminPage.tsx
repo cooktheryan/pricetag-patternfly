@@ -1611,13 +1611,15 @@ export function AdminPage() {
             <Tab key={entry.id} eventKey={TABS.indexOf(entry)} title={entry.label} />
           ))}
         </Tabs>
-        {active === 'users' && <UsersTab />}
-        {active === 'user-keys' && <UserKeysTab />}
-        {active === 'safety-net' && <SafetyNetTab />}
-        {active === 'user-quota' && <QuotaTab />}
-        {active === 'model-pricing' && <PricingTab />}
-        {active === 'discounts' && <DiscountsTab />}
-        {active === 'restrictions' && <RestrictionsTab />}
+        <div role="tabpanel" aria-label={TABS[tab]?.label ?? 'Admin'} className="pf-admin-panel">
+          {active === 'users' && <UsersTab />}
+          {active === 'user-keys' && <UserKeysTab />}
+          {active === 'safety-net' && <SafetyNetTab />}
+          {active === 'user-quota' && <QuotaTab />}
+          {active === 'model-pricing' && <PricingTab />}
+          {active === 'discounts' && <DiscountsTab />}
+          {active === 'restrictions' && <RestrictionsTab />}
+        </div>
       </div>
     </PageSection>
   )
