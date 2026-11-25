@@ -111,16 +111,24 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 ## Phase 6 — Admin console (`/admin`)
 
-- [ ] Tab shell (Users, User keys, Safety Net, User quota, Model pricing,
+- [x] Tab shell (Users, User keys, Safety Net, User quota, Model pricing,
       Discounts, Model Restrictions) + per-tab refresh + updated timestamp.
-- [ ] Users tab: create/update form, search/status filters, roles + manager
-      assignment, key drill-down.
-- [ ] User keys tab (mint/revoke/expire).
-- [ ] Safety Net + User quota policy forms.
-- [ ] Model pricing tables + refresh + discounts + restrictions.
-- [ ] Impersonation entry point (`/admin/impersonate?as=`).
-- **Accept**: all tabs render against local stack; user create/update and
-  key mint/revoke round-trips pass; read-only parity on live gateway.
+- [x] Users tab: create/update form, search/status filters, roles + manager
+      assignment, key drill-down, view-as.
+- [x] User keys tab: list, issue onboarding key with a reveal-once panel,
+      revoke. The local maas stub returns 503
+      (`group scope unavailable for key operations`) on admin revoke, so the
+      revoke path was only code-verified here; mint returned 201.
+- [ ] Safety Net + User quota policy **forms** — both tabs render their live
+      policy data read-only so far (Phase 6b).
+- [ ] Model pricing save/refresh and editable discounts/restrictions — the
+      tabs render live tables read-only so far; editing is Phase 6b.
+- [x] Impersonation entry point (`/admin/impersonate?as=`).
+- **Accept**: partial 6a verified on the local stack: all seven tabs render,
+  the Users tab loaded 8 partner users, a management-user save returned
+  200, role/manager PATCH reloaded cleanly, the user detail modal listed
+  partner keys, and the onboarding-key form returned a reveal-once secret.
+  Read-only live parity follows with Phase 9; policy editing follows in 6b.
 
 ## Phase 7 — Auxiliary states
 

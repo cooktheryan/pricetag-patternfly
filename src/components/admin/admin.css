@@ -1,0 +1,105 @@
+/* Layout for the admin console. PatternFly supplies the controls and tables;
+   these rules arrange the tab stacks and the compact admin forms. */
+
+.pf-admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--lg);
+}
+
+.pf-admin-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.pf-admin-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.pf-admin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.pf-admin-muted {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  margin-bottom: var(--pf-t--global--spacer--md);
+}
+
+.pf-admin-table-scroll {
+  overflow-x: auto;
+}
+
+.pf-admin-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-admin-person {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+}
+
+.pf-admin-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  margin-top: var(--pf-t--global--spacer--md);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-admin-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--pf-t--global--spacer--md);
+  margin-bottom: var(--pf-t--global--spacer--sm);
+}
+
+.pf-admin-form .pf-v6-c-form__group {
+  min-width: 200px;
+}
+
+.pf-admin-subhead {
+  margin: var(--pf-t--global--spacer--md) 0 var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--lg);
+}
+
+.pf-admin-reveal {
+  margin-top: var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--status--success--default);
+  background-color: color-mix(
+    in srgb,
+    var(--pf-t--global--color--nonstatus--green--default) 6%,
+    var(--pf-t--global--background--color--primary--default)
+  );
+}
+
+.pf-admin-reveal .pf-admin-actions {
+  margin-top: var(--pf-t--global--spacer--sm);
+}
