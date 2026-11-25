@@ -14,6 +14,7 @@ import {
 import logo from '../assets/red-hat-logo.svg'
 import { useSession } from '../lib/session'
 import { gatewayUrl } from '../lib/gateway'
+import { SettingsMenu } from '../components/SettingsMenu'
 
 /**
  * Legacy parity (internal/dashboard/login.html): a single masked api_key
@@ -42,7 +43,11 @@ export function LoginPage() {
   }
 
   return (
-    <PFLoginPage brandImgSrc={logo} brandImgAlt="Red Hat" loginTitle="Log in to your account">
+    <>
+      <div className="app-login-settings">
+        <SettingsMenu />
+      </div>
+      <PFLoginPage brandImgSrc={logo} brandImgAlt="Red Hat" loginTitle="Log in to your account">
       {/* Gateway endpoints are root-relative by contract (the dev proxy and
           the production nginx reverse proxy both forward them from the
           serving origin), matching every fetch in the app. */}
@@ -83,6 +88,7 @@ export function LoginPage() {
           </Button>
         </ActionGroup>
       </Form>
-    </PFLoginPage>
+      </PFLoginPage>
+    </>
   )
 }

@@ -31,8 +31,17 @@ import {
 } from '@patternfly/react-core'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import { useSession } from '../lib/session'
+import { gatewayUrl } from '../lib/gateway'
 import { impersonateAction } from '../lib/sessionChange'
-import { keyFilename } from '../lib/keys'
+import {
+  checkSession,
+  clearRevocation,
+  keyFilename,
+  pendingRevocations,
+  queueRevocation,
+  sameIdentity,
+} from '../lib/keys'
+import type { SessionIdentity } from '../lib/keys'
 import type {
   AdminKey,
   BudgetOverride,
@@ -562,7 +571,18 @@ function UsersTab() {
   )
 }
 
+interface AdminRevealSecret {
+  key: string
+  id: string
+  name: string
+  username: string
+  identity: SessionIdentity
+  generation: number
+}
+
 function UserKeysTab() {
+  const { who } = useSession()
+  const sessionGeneration = useRef(0)
   const users = useAdminData(fetchPartnerUsers)
   const keys = useAdminData(fetchAdminKeys)
   const [username, setUsername] = useState('')
@@ -574,11 +594,57 @@ function UserKeysTab() {
   const [message, setMessage] = useState('')
   // Deliver the mint secret from a closure-like ref, never React state or
   // rendered markup. The gateway returns it once; only Copy/Download read it.
-  const secretRef = useRef<{ key: string; id: string; name: string; username: string } | null>(null)
+  const secretRef = useRef<AdminRevealSecret | null>(null)
   const [hasSecret, setHasSecret] = useState(false)
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
   const [revokeTarget, setRevokeTarget] = useState<AdminKey | null>(null)
   const [revoking, setRevoking] = useState(false)
+
+  useEffect(() => {
+    // A session/identity change invalidates any reveal held by this mount.
+    // The generation also catches an A -> B -> A transition within one mint.
+    sessionGeneration.current += 1
+    secretRef.current = null
+    setHasSecret(false)
+    setCopyState('idle')
+  }, [who?.user, who?.impersonating, who?.real_user])
+
+  // Retry queued admin revocations with bounded backoff while mounted, plus
+  // on focus, so a transient outage does not strand an active key.
+  useEffect(() => {
+    let cancelled = false
+    let attempts = 0
+    let timer: number | undefined
+    const retry = async () => {
+      const entries = pendingRevocations('admin')
+      if (entries.length === 0) return
+      attempts += 1
+      for (const entry of entries) {
+        try {
+          await revokeAdminKey(entry.id)
+          if (!cancelled) clearRevocation(entry.id)
+        } catch {
+          // Keep it queued for the next attempt.
+        }
+      }
+      if (attempts >= 5 && timer !== undefined) {
+        window.clearInterval(timer)
+      }
+    }
+    void retry()
+    timer = window.setInterval(() => {
+      if (!cancelled && attempts < 5) void retry()
+    }, 60_000)
+    const onFocus = () => {
+      if (!cancelled && attempts < 5) void retry()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [])
 
   useEffect(() => {
     if (!hasSecret) return
@@ -623,9 +689,63 @@ function UserKeysTab() {
     setCreating(true)
     setError('')
     setMessage('')
+    const startingIdentity = {
+      user: who?.user ?? '',
+      impersonating: who?.impersonating === true,
+      real_user: who?.real_user ?? '',
+    }
+    const startingGeneration = sessionGeneration.current
     try {
       const result = await createAdminKey(username, group.trim(), keyName.trim(), lifetime.trim())
-      secretRef.current = { ...result, name: keyName.trim(), username }
+      let check: Awaited<ReturnType<typeof checkSession>>
+      try {
+        check = await checkSession()
+      } catch {
+        check = { status: 'unavailable' }
+      }
+      // Fail closed: only a verified, unchanged identity may receive the
+      // one-time secret. An unavailable check is not proof of an identity
+      // change, so discard the secret and queue revocation for later instead
+      // of destroying the key during the same gateway outage.
+      const changed =
+        sessionGeneration.current !== startingGeneration ||
+        check.status !== 'ok' ||
+        check.identity.user !== startingIdentity.user ||
+        check.identity.impersonating !== startingIdentity.impersonating ||
+        check.identity.real_user !== startingIdentity.real_user
+      if (changed) {
+        secretRef.current = null
+        setHasSecret(false)
+        if (check.status === 'unavailable') {
+          queueRevocation({
+            id: result.id,
+            source: 'admin',
+            label: `${username}: ${keyName.trim()}`,
+          })
+          setError(
+            `Session verification is unavailable; the new secret was discarded and revocation ${result.id} is queued.`,
+          )
+        } else {
+          try {
+            await revokeAdminKey(result.id)
+            setError(
+              'The session could not be verified after minting; the new key was revoked. Please try again.',
+            )
+          } catch {
+            queueRevocation({
+              id: result.id,
+              source: 'admin',
+              label: `${username}: ${keyName.trim()}`,
+            })
+            setError(
+              `The session could not be verified after minting; the new secret was discarded. Pending revocation ${result.id} will retry automatically.`,
+            )
+          }
+        }
+        keys.reload()
+        return
+      }
+      secretRef.current = { ...result, name: keyName.trim(), username, identity: startingIdentity, generation: startingGeneration }
       setHasSecret(true)
       setCopyState('idle')
       keys.reload()
@@ -636,9 +756,39 @@ function UserKeysTab() {
     }
   }
 
-  const onCopy = async () => {
+  const invalidateReveal = () => {
+    secretRef.current = null
+    setHasSecret(false)
+    setCopyState('idle')
+    setError('Your session changed; the key secret was discarded.')
+  }
+
+  const authorizeReveal = async (): Promise<AdminRevealSecret | null> => {
     const secret = secretRef.current
+    if (!secret) return null
+    const generation = sessionGeneration.current
+    const check = await checkSession()
+    if (
+      sessionGeneration.current !== generation ||
+      secretRef.current !== secret ||
+      check.status !== 'ok' ||
+      !sameIdentity(secret.identity, check.identity)
+    ) {
+      invalidateReveal()
+      return null
+    }
+    return secret
+  }
+
+  const onCopy = async () => {
+    const secret = await authorizeReveal()
     if (!secret) return
+    // Last-moment invalidation: no await between this check and the
+    // clipboard call, so a dismissal/identity change cannot leak the old key.
+    if (sessionGeneration.current !== secret.generation || secretRef.current !== secret) {
+      invalidateReveal()
+      return
+    }
     try {
       await navigator.clipboard.writeText(secret.key)
       setCopyState('copied')
@@ -647,9 +797,13 @@ function UserKeysTab() {
     }
   }
 
-  const onDownload = () => {
-    const secret = secretRef.current
+  const onDownload = async () => {
+    const secret = await authorizeReveal()
     if (!secret) return
+    if (sessionGeneration.current !== secret.generation || secretRef.current !== secret) {
+      invalidateReveal()
+      return
+    }
     const url = URL.createObjectURL(new Blob([`${secret.key}\n`], { type: 'text/plain' }))
     const link = document.createElement('a')
     link.href = url
@@ -1580,8 +1734,46 @@ function RestrictionsTab() {
 /** Phase 6: administrator console (`/admin`). */
 export function AdminPage() {
   const { who } = useSession()
-  const [tab, setTab] = useState(0)
-  const active: TabId = TABS[tab]?.id ?? 'users'
+  const [tab, setTab] = useState<TabId>('users')
+  // Managed-mode sections are not served by every gateway deployment. Probe
+  // their read-only endpoints and hide only the 404s; the live standalone
+  // gateway 404s /api/v1/admin/keys, which used to render a broken tab.
+  const [managedTabs, setManagedTabs] = useState<{
+    userKeys: boolean
+    userQuota: boolean
+    modelPricing: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const probe = (path: string) =>
+      fetch(gatewayUrl(path), {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      })
+        .then((res) => res.ok)
+        .catch(() => false)
+    void Promise.all([
+      probe('api/v1/admin/keys?limit=1&offset=0'),
+      probe('api/v1/management/budgets?limit=1&offset=0&search='),
+      probe('api/v1/management/prices'),
+    ]).then(([userKeys, userQuota, modelPricing]) => {
+      if (!controller.signal.aborted) setManagedTabs({ userKeys, userQuota, modelPricing })
+    })
+    return () => controller.abort()
+  }, [])
+
+  const visibleTabs = TABS.filter((entry) => {
+    if (managedTabs === null) return entry.id !== 'user-keys' && entry.id !== 'user-quota' && entry.id !== 'model-pricing'
+    if (entry.id === 'user-keys') return managedTabs.userKeys
+    if (entry.id === 'user-quota') return managedTabs.userQuota
+    if (entry.id === 'model-pricing') return managedTabs.modelPricing
+    return true
+  })
+  const active: TabId = visibleTabs.some((entry) => entry.id === tab) ? tab : 'users'
+  const activeLabel = visibleTabs.find((entry) => entry.id === active)?.label ?? 'Admin'
 
   if (!who?.isSuperAdmin) {
     return (
@@ -1603,12 +1795,12 @@ export function AdminPage() {
           </p>
         </header>
         <Tabs
-          activeKey={tab}
-          onSelect={(_event, key) => setTab(Number(key))}
+          activeKey={active}
+          onSelect={(_event, key) => setTab(String(key) as TabId)}
           aria-label="Admin sections"
         >
-          {TABS.map((entry) => (
-            <Tab key={entry.id} eventKey={TABS.indexOf(entry)} title={entry.label}>
+          {visibleTabs.map((entry) => (
+            <Tab key={entry.id} eventKey={entry.id} title={entry.label}>
               {/* PF renders the aria-controls target only when the Tab has
                   children; the visible content lives in the labelled panel
                   below so inactive tabs do not fetch their data. */}
@@ -1616,7 +1808,7 @@ export function AdminPage() {
             </Tab>
           ))}
         </Tabs>
-        <div role="tabpanel" aria-label={TABS[tab]?.label ?? 'Admin'} className="pf-admin-panel">
+        <div role="tabpanel" aria-label={activeLabel} className="pf-admin-panel">
           {active === 'users' && <UsersTab />}
           {active === 'user-keys' && <UserKeysTab />}
           {active === 'safety-net' && <SafetyNetTab />}

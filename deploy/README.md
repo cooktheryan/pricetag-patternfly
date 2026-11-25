@@ -84,3 +84,14 @@ TLS validation is never disabled.
 The live AWS gateway is read-only for this UI. Destructive flows (key
 create/revoke, admin writes) are tested against the local standalone stack,
 never the live gateway.
+
+## Security controls applied by the script
+
+- nginx injects CSP/HSTS/nosniff/frame/referrer/permissions/COOP/CORP headers
+  on every response and clears client-supplied identity headers before
+  proxying.
+- `networkpolicy.yaml` allows ingress only from the OpenShift ingress
+  namespace and cluster nodes on 8080, and egress only to DNS and
+  `32.198.91.108:8443`.
+- Pin the image by digest for production:
+  `IMAGE=quay.io/redhat-et/patternfly:pricetag-ui@sha256:<digest> deploy/deploy.sh`.

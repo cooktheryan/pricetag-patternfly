@@ -193,18 +193,19 @@ export function toolColor(tool: string): string {
 }
 
 // The palette above comes from the old dark UI. Table text needs darker
-// variants on PatternFly's light theme to meet WCAG AA contrast.
+// variants on PatternFly's light theme to meet WCAG AA contrast; the CSS
+// variables switch to bright variants under .pf-v6-theme-dark.
 const TOOL_TEXT_COLORS: Record<string, string> = {
-  'Claude Code': '#8a5a00',
-  Codex: '#2f6f2f',
-  OpenCode: '#005a9c',
-  Pi: '#5e40be',
-  curl: '#4d4d4d',
-  Other: '#006666',
+  'Claude Code': 'var(--pricetag-tool-claude)',
+  Codex: 'var(--pricetag-tool-codex)',
+  OpenCode: 'var(--pricetag-tool-opencode)',
+  Pi: 'var(--pricetag-tool-pi)',
+  curl: 'var(--pricetag-tool-curl)',
+  Other: 'var(--pricetag-tool-other)',
 }
 
 export function toolTextColor(tool: string): string {
-  return TOOL_TEXT_COLORS[tool] || '#006666'
+  return TOOL_TEXT_COLORS[tool] || 'var(--pricetag-tool-other)'
 }
 
 export interface StatusCell {

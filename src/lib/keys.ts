@@ -157,3 +157,123 @@ export async function revokeKey(id: string): Promise<void> {
   })
   if (!res.ok) throw new Error(`Could not revoke the key (HTTP ${res.status}).`)
 }
+
+export interface SessionIdentity {
+  user: string
+  impersonating: boolean
+  real_user: string
+}
+
+/** Re-read the live session so a pending mint can detect an identity change. */
+export function sameIdentity(
+  a: SessionIdentity | null | undefined,
+  b: SessionIdentity | null | undefined,
+): boolean {
+  return Boolean(
+    a &&
+      b &&
+      a.user === b.user &&
+      a.impersonating === b.impersonating &&
+      a.real_user === b.real_user,
+  )
+}
+
+export type SessionCheck =
+  | { status: 'ok'; identity: SessionIdentity }
+  | { status: 'unavailable' }
+  | { status: 'unauthenticated' }
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export async function checkSession(): Promise<SessionCheck> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(gatewayUrl('whoami'), {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (res.status === 401 || res.status === 403) return { status: 'unauthenticated' }
+      if (!res.ok) {
+        if (attempt < 2) {
+          await delay(400)
+          continue
+        }
+        return { status: 'unavailable' }
+      }
+      const data: unknown = await res.json()
+      if (typeof data !== 'object' || data === null) return { status: 'unavailable' }
+      const d = data as Record<string, unknown>
+      // Require the complete identity shape; a partial proxy response must
+      // never compare equal to the starting identity and reveal a secret.
+      if (
+        typeof d.user !== 'string' ||
+        typeof d.impersonating !== 'boolean' ||
+        typeof d.real_user !== 'string'
+      ) {
+        return { status: 'unavailable' }
+      }
+      return {
+        status: 'ok',
+        identity: { user: d.user, impersonating: d.impersonating, real_user: d.real_user },
+      }
+    } catch {
+      if (attempt < 2) {
+        await delay(400)
+        continue
+      }
+      return { status: 'unavailable' }
+    }
+  }
+  return { status: 'unavailable' }
+}
+
+export interface PendingRevocation {
+  id: string
+  source: 'personal' | 'admin'
+  label: string
+  at: number
+}
+
+const PENDING_REVOCATIONS_KEY = 'pricetag-pending-revocations'
+
+function readPending(): PendingRevocation[] {
+  try {
+    const raw = window.localStorage.getItem(PENDING_REVOCATIONS_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (entry): entry is PendingRevocation =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as PendingRevocation).id === 'string' &&
+        ((entry as PendingRevocation).source === 'personal' ||
+          (entry as PendingRevocation).source === 'admin'),
+    )
+  } catch {
+    return []
+  }
+}
+
+function writePending(entries: PendingRevocation[]): void {
+  try {
+    window.localStorage.setItem(PENDING_REVOCATIONS_KEY, JSON.stringify(entries))
+  } catch {
+    // Best-effort; the ID is also shown in the error message.
+  }
+}
+
+export function queueRevocation(entry: Omit<PendingRevocation, 'at'>): void {
+  const entries = readPending().filter((pending) => pending.id !== entry.id)
+  entries.push({ ...entry, at: Date.now() })
+  writePending(entries)
+}
+
+export function pendingRevocations(source: PendingRevocation['source']): PendingRevocation[] {
+  return readPending().filter((entry) => entry.source === source)
+}
+
+export function clearRevocation(id: string): void {
+  writePending(readPending().filter((entry) => entry.id !== id))
+}

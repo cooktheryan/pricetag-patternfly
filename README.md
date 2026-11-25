@@ -109,3 +109,47 @@ role=tabpanel labels for the admin tabs. `test/equiv/a11y.spec.cjs` runs
 axe-core against login and the dashboard/manager/keys/admin surfaces; it is
 part of `npm run test:equiv` and has no serious/critical violations locally
 or on the live Route.
+
+## Security
+
+The deployment is hardened end to end:
+
+- **Response headers**: CSP (`script-src 'self'`, no inline scripts,
+  `frame-ancestors 'none'`, `form-action 'self'`), HSTS, nosniff,
+  `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP and
+  CORP are set by nginx on every route, including hashed assets.
+- **Proxy boundary**: client-supplied identity headers (`X-User`,
+  `X-Forwarded-User`, `X-Auth-Request-User`, `X-Remote-User`, `Remote-User`,
+  forwarded e-mail/groups/tokens, `Forwarded`) are cleared before the
+  upstream; `X-Forwarded-For` is normalized to the immediate peer and never
+  appends client input. Session POSTs require `Sec-Fetch-Site: same-origin`
+  and an Origin that exactly matches the Route.
+- **Dev proxy**: Origin is rewritten only for the dev server's own
+  `localhost:5173` / `127.0.0.1:5173` origin. Any other origin passes through
+  and the gateway rejects it, so the dev proxy cannot act as a CSRF bypass.
+- **Network**: a NetworkPolicy limits ingress to the OpenShift router (and
+  node probes) on 8080 and egress to DNS plus the gateway's `8443`. The pod is
+  non-root with a read-only root filesystem, all capabilities dropped,
+  RuntimeDefault seccomp, and no service-account token.
+- **Supply chain**: base images are pinned by digest, the Quay image is
+  deployed by manifest digest (`IMAGE=quay.io/redhat-et/patternfly:pricetag-ui@sha256:<digest>`),
+  and `npm audit` is clean for production and dev dependencies.
+- **Secrets**: minted API keys are held only in closure-like refs (never React
+  state, markup, storage, or logs), the reveal auto-clears after five minutes
+  or on leave/pagehide, and test screenshots/traces are local-only. The Quay
+  robot token note is `0600`; rotate it if it has ever been copied or logged.
+
+A dedicated container-image CVE scan (for example Trivy against the pinned
+nginx base) is the remaining supply-chain follow-up; the application
+dependency audit is clean.
+
+## Publishing the image
+
+`.github/workflows/quay.yaml` builds the Containerfile on every push to
+`main` and on `v*` tags, pushing `quay.io/redhat-et/patternfly:pricetag-ui`
+plus immutable `pricetag-ui-sha-*` / release tags. Configure repository
+secrets `QUAY_USERNAME` and `QUAY_PASSWORD` with a Quay robot that has write
+access to `redhat-et/patternfly`.
+
+The live Deployment is pinned by manifest digest; a new tag does not change
+the running pod until `deploy/deploy.sh` is run with the new digest.

@@ -35,6 +35,16 @@ https://pricetag-patternfly-pricetag-patternfly.apps.emerg.pcbk.p1.openshiftapps
 - Old-UI captures: `docs/reference/`
 - Behavioral spec: `~/git/pricetag-metering/tests/ui/*.cjs`
 
+## Security
+
+- CSP/HSTS/frame/referrer/permissions/COOP/CORP headers in nginx; identity
+  headers cleared; XFF normalized; NetworkPolicy restricts ingress/egress;
+  image deployed by digest; pod is non-root/read-only/drop-ALL/no SA token.
+- Minted keys live in refs, never React state/DOM/storage; reveal auto-clears;
+  test artifacts are local-only.
+- `npm audit` is clean; container-image CVE scanning (Trivy) is the remaining
+  supply-chain follow-up.
+
 ## Rules
 
 - ocr gate before every commit/push.

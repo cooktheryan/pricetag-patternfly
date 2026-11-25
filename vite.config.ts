@@ -30,6 +30,13 @@ const upstreamInsecure =
 // https://32.198.91.108:8443.
 const upstreamPublicOrigin = process.env.UPSTREAM_PUBLIC_ORIGIN ?? 'http://localhost:8080'
 
+// Only rewrite the Origin when it exactly matches the dev server's effective
+// origin, derived from the request's Host. This covers custom --port/host
+// values; a request from another localhost port (same-site, so Lax cookies
+// would be sent) or any other site passes its real Origin through, where the
+// gateway's MANAGEMENT_PUBLIC_ORIGIN check rejects it. Rewriting every Origin
+// would silently turn the dev proxy into a CSRF bypass.
+
 const proxyOptions: ProxyOptions = {
   target: upstream,
   changeOrigin: true,
@@ -43,7 +50,11 @@ function sessionProxy(bypass?: ProxyOptions['bypass']): ProxyOptions {
     ...(bypass ? { bypass } : {}),
     configure: (proxy) => {
       proxy.on('proxyReq', (proxyReq, req) => {
-        if (req.headers.origin) {
+        const host = req.headers.host
+        // Derive the scheme from the actual connection, never from a
+        // client-supplied X-Forwarded-Proto header.
+        const proto = (req.socket as { encrypted?: boolean }).encrypted ? 'https' : 'http'
+        if (req.headers.origin && host && req.headers.origin === `${proto}://${host}`) {
           proxyReq.setHeader('Origin', upstreamPublicOrigin)
         }
       })

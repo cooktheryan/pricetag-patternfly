@@ -364,3 +364,39 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The 400 nonstatus steps are readable on white but too dark on the dark
+   surface; the --default steps are the brighter dark-theme variants. */
+:root.pf-v6-theme-dark .pf-dashboard-kpi--blue .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--blue--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-kpi--green .pf-dashboard-kpi-value,
+:root.pf-v6-theme-dark .pf-dashboard-kpi--saved .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--green--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-kpi--orange .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--orange--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-kpi--purple .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--purple--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-provider--anthropic {
+  color: var(--pf-t--global--color--nonstatus--orange--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-provider--openai {
+  color: var(--pf-t--global--color--nonstatus--green--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-provider--other,
+:root.pf-v6-theme-dark .pf-dashboard-cached {
+  color: var(--pf-t--global--color--nonstatus--teal--default);
+}
+
+:root.pf-v6-theme-dark .pf-dashboard-cache-write {
+  color: var(--pf-t--global--color--nonstatus--purple--default);
+}

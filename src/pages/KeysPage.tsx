@@ -34,13 +34,18 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from '@patternfly/react-table'
 import KeyIcon from '@patternfly/react-icons/dist/esm/icons/key-icon'
 import { useSession } from '../lib/session'
-import type { ApiKey, KeyState } from '../lib/keys'
+import type { ApiKey, KeyState, SessionIdentity } from '../lib/keys'
 import {
   createKey,
+  checkSession,
+  sameIdentity,
   fetchAllKeys,
   keyExpiry,
   keyFilename,
   keyState,
+  clearRevocation,
+  pendingRevocations,
+  queueRevocation,
   remainingLabel,
   revokeKey,
 } from '../lib/keys'
@@ -63,6 +68,14 @@ function statusColor(state: KeyState): 'green' | 'red' | 'orange' | 'grey' {
 }
 
 /** Phase 5: personal API key self-service (`/management`). */
+interface RevealSecret {
+  key: string
+  id: string
+  name: string
+  identity: SessionIdentity
+  generation: number
+}
+
 export function KeysPage() {
   const { who } = useSession()
   const [keys, setKeys] = useState<ApiKey[]>([])
@@ -80,15 +93,14 @@ export function KeysPage() {
   const [createName, setCreateName] = useState('')
   const [createLifetime, setCreateLifetime] = useState('30d')
   const [creating, setCreating] = useState(false)
-  const [created, setCreated] = useState<{ key: string; id: string; name: string } | null>(null)
+  // The mint secret lives only in a ref (never React state or markup).
+  const secretRef = useRef<RevealSecret | null>(null)
+  const [hasSecret, setHasSecret] = useState(false)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const identity = who?.user ?? ''
   const impersonating = who?.impersonating === true
   const keyServiceEnabled = who?.keyServiceEnabled === true
-  const sessionRef = useRef('')
-  useEffect(() => {
-    sessionRef.current = `${identity}|${keyServiceEnabled}|${impersonating}`
-  }, [identity, keyServiceEnabled, impersonating])
+  const sessionGeneration = useRef(0)
 
   useEffect(() => {
     // Never show the previous identity's keys while a new session is
@@ -126,7 +138,8 @@ export function KeysPage() {
   // The reveal-once secret must not survive navigation away from the page.
   useEffect(() => {
     const clear = () => {
-      setCreated(null)
+      secretRef.current = null
+      setHasSecret(false)
       setCopyState('idle')
     }
     window.addEventListener('pagehide', clear)
@@ -142,15 +155,62 @@ export function KeysPage() {
     setPage(1)
   }, [search, statusFilter, pageSize])
 
+  // Retry queued revocations with bounded backoff while this page is mounted,
+  // plus on focus, so a transient outage does not strand an active key.
+  useEffect(() => {
+    let cancelled = false
+    let attempts = 0
+    let timer: number | undefined
+    const retry = async () => {
+      const entries = pendingRevocations('personal')
+      if (entries.length === 0) return
+      attempts += 1
+      for (const entry of entries) {
+        try {
+          await revokeKey(entry.id)
+          if (!cancelled) clearRevocation(entry.id)
+        } catch {
+          // Keep it queued for the next attempt.
+        }
+      }
+      if (attempts >= 5 && timer !== undefined) {
+        window.clearInterval(timer)
+      }
+    }
+    void retry()
+    timer = window.setInterval(() => {
+      if (!cancelled && attempts < 5) void retry()
+    }, 60_000)
+    const onFocus = () => {
+      if (!cancelled && attempts < 5) void retry()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [])
+
   // Bound the reveal window even if the user leaves the panel open.
   useEffect(() => {
-    if (!created) return
+    // A session/identity change invalidates any reveal held by this mount.
+    // The generation also catches an A -> B -> A transition within one mint.
+    sessionGeneration.current += 1
+    secretRef.current = null
+    setHasSecret(false)
+    setCopyState('idle')
+  }, [identity, impersonating, who?.real_user])
+
+  useEffect(() => {
+    if (!hasSecret) return
     const timer = setTimeout(() => {
-      setCreated(null)
+      secretRef.current = null
+      setHasSecret(false)
       setCopyState('idle')
     }, 5 * 60_000)
     return () => clearTimeout(timer)
-  }, [created])
+  }, [hasSecret])
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -183,18 +243,56 @@ export function KeysPage() {
     }
     setCreating(true)
     setError('')
-    const startingSession = sessionRef.current
+    const startingIdentity = {
+      user: who?.user ?? '',
+      impersonating: who?.impersonating === true,
+      real_user: who?.real_user ?? '',
+    }
+    const startingGeneration = sessionGeneration.current
     try {
       const result = await createKey(name, lifetime)
-      if (sessionRef.current !== startingSession) {
-        setCreated(null)
-        setError(
-          'Your session changed while the key was being created. Check My keys; the new secret was discarded.',
-        )
+      let check: Awaited<ReturnType<typeof checkSession>>
+      try {
+        check = await checkSession()
+      } catch {
+        check = { status: 'unavailable' }
+      }
+      // Fail closed: only a verified, unchanged identity may receive the
+      // one-time secret. An unavailable check is not proof of an identity
+      // change, so discard the secret and queue revocation for later instead
+      // of destroying the key during the same gateway outage.
+      const changed =
+        sessionGeneration.current !== startingGeneration ||
+        check.status !== 'ok' ||
+        check.identity.user !== startingIdentity.user ||
+        check.identity.impersonating !== startingIdentity.impersonating ||
+        check.identity.real_user !== startingIdentity.real_user
+      if (changed) {
+        secretRef.current = null
+        setHasSecret(false)
+        if (check.status === 'unavailable') {
+          queueRevocation({ id: result.id, source: 'personal', label: name })
+          setError(
+            `Session verification is unavailable; the new secret was discarded and revocation ${result.id} is queued.`,
+          )
+        } else {
+          try {
+            await revokeKey(result.id)
+            setError(
+              'The session could not be verified after minting; the new key was revoked. Please try again.',
+            )
+          } catch {
+            queueRevocation({ id: result.id, source: 'personal', label: name })
+            setError(
+              `The session could not be verified after minting; the new secret was discarded. Pending revocation ${result.id} will retry automatically.`,
+            )
+          }
+        }
         setReload((value) => value + 1)
         return
       }
-      setCreated({ ...result, name })
+      secretRef.current = { ...result, name, identity: startingIdentity, generation: startingGeneration }
+      setHasSecret(true)
       setCopyState('idle')
       setSearch('')
       setStatusFilter('active')
@@ -207,10 +305,41 @@ export function KeysPage() {
     }
   }
 
+  const invalidateReveal = () => {
+    secretRef.current = null
+    setHasSecret(false)
+    setCopyState('idle')
+    setError('Your session changed; the key secret was discarded.')
+  }
+
+  const authorizeReveal = async (): Promise<RevealSecret | null> => {
+    const secret = secretRef.current
+    if (!secret) return null
+    const generation = sessionGeneration.current
+    const check = await checkSession()
+    if (
+      sessionGeneration.current !== generation ||
+      secretRef.current !== secret ||
+      check.status !== 'ok' ||
+      !sameIdentity(secret.identity, check.identity)
+    ) {
+      invalidateReveal()
+      return null
+    }
+    return secret
+  }
+
   const onCopy = async () => {
-    if (!created) return
+    const secret = await authorizeReveal()
+    if (!secret) return
+    // Last-moment invalidation: no await between this check and the
+    // clipboard call, so a dismissal/identity change cannot leak the old key.
+    if (sessionGeneration.current !== secret.generation || secretRef.current !== secret) {
+      invalidateReveal()
+      return
+    }
     try {
-      await navigator.clipboard.writeText(created.key)
+      await navigator.clipboard.writeText(secret.key)
       setCopyState('copied')
     } catch {
       setCopyState('error')
@@ -228,12 +357,17 @@ export function KeysPage() {
     }
   }
 
-  const onDownload = () => {
-    if (!created) return
-    const url = URL.createObjectURL(new Blob([`${created.key}\n`], { type: 'text/plain' }))
+  const onDownload = async () => {
+    const secret = await authorizeReveal()
+    if (!secret) return
+    if (sessionGeneration.current !== secret.generation || secretRef.current !== secret) {
+      invalidateReveal()
+      return
+    }
+    const url = URL.createObjectURL(new Blob([`${secret.key}\n`], { type: 'text/plain' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = keyFilename(who?.user || '', created.name)
+    link.download = keyFilename(who?.user || '', secret.name)
     try {
       document.body.append(link)
       link.click()
@@ -244,7 +378,8 @@ export function KeysPage() {
   }
 
   const dismissCreated = () => {
-    setCreated(null)
+    secretRef.current = null
+    setHasSecret(false)
     setCopyState('idle')
   }
 
@@ -312,7 +447,8 @@ export function KeysPage() {
               const next = Number(eventKey)
               if (next !== 1) {
                 // Leaving the create workflow drops the one-time secret.
-                setCreated(null)
+                secretRef.current = null
+                setHasSecret(false)
                 setCopyState('idle')
               }
               setTab(next)
@@ -521,7 +657,7 @@ export function KeysPage() {
                     </ActionGroup>
                   </Form>
 
-                  {created && (
+                  {hasSecret && (
                     <Card isPlain className="pf-keys-reveal">
                       <CardBody>
                         <p>
