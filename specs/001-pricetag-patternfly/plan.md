@@ -82,10 +82,18 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 ## Phase 4 — Manager (`/manager`)
 
-- [ ] Org scope toggle, time presets, summary line, org budget/saved/members
-      cards, four chart blocks, people table + person drill-down
-      (`/api/v1/org/*`).
-- **Accept**: dual-run parity on local stack (seeded org tree).
+- [x] Org scope toggle (person/team filter), time presets, summary line,
+      org budget/saved/members cards, four chart blocks (hosted-vs-vendor,
+      by model, by user, daily model usage), people table with sortable
+      columns, and person drill-down (`/api/v1/org/*`).
+- [x] Self scope: the live page falls back to the caller's own usage and the
+      dashboard endpoints; the SPA keeps the same fallback and hides the
+      members card/table.
+- **Accept**: dual-run parity on local stack (seeded org tree). ✔ verified
+  2026-11-25 against the local standalone stack as a super-admin: 8 people,
+  $231/$4,800 org budget, 7 with usage; range presets, person filter
+  (`root=` scoping), column sorting, person modal, and the four charts
+  exercised in Playwright. Numeric dual-run parity follows in Phase 9.
 
 ## Phase 5 — My keys (`/management`)
 
