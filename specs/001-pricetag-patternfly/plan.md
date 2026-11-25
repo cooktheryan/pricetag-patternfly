@@ -119,16 +119,23 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
       revoke. The local maas stub returns 503
       (`group scope unavailable for key operations`) on admin revoke, so the
       revoke path was only code-verified here; mint returned 201.
-- [ ] Safety Net + User quota policy **forms** — both tabs render their live
-      policy data read-only so far (Phase 6b).
-- [ ] Model pricing save/refresh and editable discounts/restrictions — the
-      tabs render live tables read-only so far; editing is Phase 6b.
+- [x] Safety Net + User quota policy forms: safety-net limit/enforcement/
+      bypass models save; quota overrides set/remove with the user picker
+      and current-allowance note.
+- [x] Model pricing save (managed rates or copy-from-source), explicit
+      pricing refresh, and editable discount rules with version + save
+      followed by a rate refresh. Model Restrictions stays read-only because
+      the deployed page describes it as a read-only view of external
+      policies.
 - [x] Impersonation entry point (`/admin/impersonate?as=`).
-- **Accept**: partial 6a verified on the local stack: all seven tabs render,
-  the Users tab loaded 8 partner users, a management-user save returned
-  200, role/manager PATCH reloaded cleanly, the user detail modal listed
-  partner keys, and the onboarding-key form returned a reveal-once secret.
-  Read-only live parity follows with Phase 9; policy editing follows in 6b.
+- **Accept**: 6b verified on the local stack: safety-net save (limit 601,
+  then restored 600), quota override set ($25) and removed, model-rate save
+  + "Pricing refreshed", and discount policy save + refresh all succeeded in
+  the admin UI. User create/update and role/manager PATCH were verified in
+  6a; onboarding-key mint returned a reveal-once secret. Admin key revoke
+  remains code-verified only: the local standalone maas path has no platform
+  group scope (`503 group scope unavailable for key operations`), while the
+  live gateway provides it. Read-only live parity follows in Phase 9.
 
 ## Phase 7 — Auxiliary states
 

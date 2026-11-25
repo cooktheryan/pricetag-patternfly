@@ -7,6 +7,7 @@ import {
   Card,
   CardBody,
   CardTitle,
+  Checkbox,
   DescriptionList,
   DescriptionListDescription,
   DescriptionListGroup,
@@ -35,12 +36,11 @@ import { keyFilename } from '../lib/keys'
 import type {
   AdminKey,
   BudgetOverride,
-  Discounts,
+  DiscountRule,
   ModelPolicy,
   PartnerKey,
   PartnerUser,
   PriceRow,
-  SafetyNet,
 } from '../lib/admin'
 import {
   createAdminKey,
@@ -48,14 +48,21 @@ import {
   fetchBudgets,
   fetchDiscounts,
   fetchModelPolicies,
+  fetchBudgetFor,
   fetchPartnerKeys,
   fetchPartnerUsers,
   fetchPrices,
   fetchSafetyNet,
   partnerName,
+  refreshPricing,
+  removeBudgetOverride,
   revokeAdminKey,
+  saveDiscounts,
+  savePrice,
+  setBudgetOverride,
   updateManagementUser,
   updatePartnerAccess,
+  updateSafetyNet,
 } from '../lib/admin'
 import '../components/admin/admin.css'
 
@@ -855,7 +862,54 @@ function UserKeysTab() {
 
 function SafetyNetTab() {
   const policy = useAdminData(fetchSafetyNet)
-  const data: SafetyNet | null = policy.data
+  const [limit, setLimit] = useState('')
+  const [enforced, setEnforced] = useState(false)
+  const [models, setModels] = useState<string[]>([])
+  const [modelDraft, setModelDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const data = policy.data
+    if (!data) return
+    setLimit(String(data.default_monthly_usd))
+    setEnforced(data.enforced)
+    setModels(data.allowed_over_limit_models)
+  }, [policy.data])
+
+  const addModel = () => {
+    const value = modelDraft.trim()
+    if (!value) return
+    if (/[*?[\] ]/.test(value)) {
+      setError('Use an exact model ID without spaces or wildcards.')
+      return
+    }
+    if (!models.includes(value)) setModels([...models, value])
+    setModelDraft('')
+    setError('')
+  }
+
+  const onSave = async () => {
+    const amount = Number(limit)
+    if (!(amount > 0)) {
+      setError('Monthly limit must be greater than zero.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    setMessage('')
+    try {
+      await updateSafetyNet(amount, enforced, models)
+      setMessage('Safety net saved.')
+      policy.reload()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save the safety net.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <AdminSection
       title="Monthly Safety Net"
@@ -864,31 +918,72 @@ function SafetyNetTab() {
       onRefresh={policy.reload}
       error={policy.error}
     >
-      {!data ? (
+      {!policy.data ? (
         <p className="pf-admin-muted">No policy loaded.</p>
       ) : (
-        <DescriptionList isHorizontal>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Default monthly USD</DescriptionListTerm>
-            <DescriptionListDescription>{fmtUsd(data.default_monthly_usd)}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Enforced</DescriptionListTerm>
-            <DescriptionListDescription>{data.enforced ? 'yes' : 'no'}</DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Allowed over-limit models</DescriptionListTerm>
-            <DescriptionListDescription>
-              {data.allowed_over_limit_models.length
-                ? data.allowed_over_limit_models.join(', ')
-                : '—'}
-            </DescriptionListDescription>
-          </DescriptionListGroup>
-          <DescriptionListGroup>
-            <DescriptionListTerm>Updated</DescriptionListTerm>
-            <DescriptionListDescription>{fmtDate(data.updated_at)}</DescriptionListDescription>
-          </DescriptionListGroup>
-        </DescriptionList>
+        <>
+          <p className="pf-admin-muted">
+            Global month-to-date spend protection. Users are blocked at the limit except for the
+            exact models listed as bypass models. Super-admins are exempt.
+          </p>
+          {error && (
+            <Alert variant="danger" isInline title="Safety net operation failed">
+              <p>{error}</p>
+            </Alert>
+          )}
+          {message && <Alert variant="success" isInline title={message} />}
+          <div className="pf-admin-form">
+            <FormGroup label="Monthly limit (USD)" fieldId="safety-limit">
+              <TextInput
+                id="safety-limit"
+                type="number"
+                min={1}
+                value={limit}
+                onChange={(_event, value) => setLimit(value)}
+              />
+            </FormGroup>
+            <Checkbox
+              id="safety-enforced"
+              label="Block over-limit requests"
+              isChecked={enforced}
+              onChange={(_event, checked) => setEnforced(checked)}
+            />
+            <Button variant="primary" isLoading={saving} isDisabled={saving} onClick={() => void onSave()}>
+              Save safety net
+            </Button>
+          </div>
+          <h3 className="pf-admin-subhead">Models allowed after the limit</h3>
+          <div className="pf-admin-chips">
+            {models.length === 0 && (
+              <span className="pf-admin-muted">No bypass models — over-limit users are fully blocked.</span>
+            )}
+            {models.map((model) => (
+              <Label key={model} isCompact color="green" onClose={() => setModels(models.filter((m) => m !== model))}>
+                {model}
+              </Label>
+            ))}
+          </div>
+          <div className="pf-admin-form">
+            <FormGroup label="Add an exact model ID" fieldId="safety-model">
+              <TextInput
+                id="safety-model"
+                value={modelDraft}
+                placeholder="e.g. rits/zai-org/glm-5-3"
+                onChange={(_event, value) => setModelDraft(value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addModel()
+                  }
+                }}
+              />
+            </FormGroup>
+            <Button variant="secondary" onClick={addModel}>
+              Add model
+            </Button>
+          </div>
+          <p className="pf-admin-muted">Updated {fmtDate(policy.data.updated_at)}</p>
+        </>
       )}
     </AdminSection>
   )
@@ -896,7 +991,111 @@ function SafetyNetTab() {
 
 function QuotaTab() {
   const budgets = useAdminData(fetchBudgets)
+  const users = useAdminData(fetchPartnerUsers)
   const rows: BudgetOverride[] = budgets.data ?? []
+  const [subject, setSubject] = useState('')
+  const [monthly, setMonthly] = useState('')
+  const [current, setCurrent] = useState<{ override: number | null; defaultMonthlyUsd: number } | null>(null)
+  const [loadingCurrent, setLoadingCurrent] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (!subject) {
+      setCurrent(null)
+      setMonthly('')
+      return
+    }
+    const controller = new AbortController()
+    setLoadingCurrent(true)
+    fetchBudgetFor(subject, controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) {
+          setCurrent(next)
+          setMonthly(String(next.override ?? next.defaultMonthlyUsd))
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCurrent(null)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingCurrent(false)
+      })
+    return () => controller.abort()
+  }, [subject])
+
+  const options = (users.data ?? []).flatMap((user) =>
+    user.logins.map((login) => ({ login, name: partnerName(user) })),
+  )
+
+  const refreshCurrent = async () => {
+    if (!subject) return
+    try {
+      setCurrent(await fetchBudgetFor(subject))
+    } catch {
+      // Leave the previous note; the table reload below is authoritative.
+    }
+  }
+
+  const onSave = async () => {
+    if (!subject) {
+      setError('Choose a user.')
+      return
+    }
+    const amount = Number(monthly)
+    if (!(amount >= 0.01) || amount > 10000) {
+      setError('Monthly USD must be between 0.01 and 10000.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    setMessage('')
+    try {
+      await setBudgetOverride(subject, amount)
+      setMessage('Override saved.')
+      budgets.reload()
+      await refreshCurrent()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save the override.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onRemove = async () => {
+    if (!subject) {
+      setError('Choose a user.')
+      return
+    }
+    if (!window.confirm('Remove this override and restore the global default?')) return
+    setSaving(true)
+    setError('')
+    setMessage('')
+    try {
+      await removeBudgetOverride(subject)
+      setMessage('Override removed; the global default applies.')
+      budgets.reload()
+      await refreshCurrent()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not remove the override.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onRemoveRow = async (principal: string) => {
+    if (!window.confirm(`Remove the override for ${principal}?`)) return
+    setError('')
+    try {
+      await removeBudgetOverride(principal)
+      setMessage('Override removed.')
+      budgets.reload()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not remove the override.')
+    }
+  }
+
   return (
     <AdminSection
       title="Per-user monthly quota overrides"
@@ -905,6 +1104,64 @@ function QuotaTab() {
       onRefresh={budgets.reload}
       error={budgets.error}
     >
+      <p className="pf-admin-muted">
+        Override the global monthly allowance for one login. Removing an override restores the
+        global default without resetting spending.
+      </p>
+      {error && (
+        <Alert variant="danger" isInline title="Quota operation failed">
+          <p>{error}</p>
+        </Alert>
+      )}
+      {message && <Alert variant="success" isInline title={message} />}
+      <div className="pf-admin-form">
+        <FormGroup label="User" fieldId="quota-user">
+          <FormSelect
+            id="quota-user"
+            value={subject}
+            onChange={(_event, value) => setSubject(value)}
+          >
+            <FormSelectOption value="" label="Select a user" />
+            {options.map((entry) => (
+              <FormSelectOption
+                key={entry.login}
+                value={entry.login}
+                label={`${entry.name} (${entry.login})`}
+              />
+            ))}
+          </FormSelect>
+        </FormGroup>
+        <FormGroup label="Monthly USD" fieldId="quota-monthly">
+          <TextInput
+            id="quota-monthly"
+            type="number"
+            min="0.01"
+            max="10000"
+            step="0.01"
+            value={monthly}
+            isDisabled={!subject || loadingCurrent}
+            onChange={(_event, value) => setMonthly(value)}
+          />
+        </FormGroup>
+        <Button variant="primary" isLoading={saving} isDisabled={saving || !subject} onClick={() => void onSave()}>
+          Set override
+        </Button>
+        <Button
+          variant="secondary"
+          isDisabled={saving || !subject || !current?.override}
+          onClick={() => void onRemove()}
+        >
+          Use global default
+        </Button>
+      </div>
+      {current && (
+        <p className="pf-admin-muted" role="status">
+          {current.override
+            ? `Current override: ${fmtUsd(current.override)} per month.`
+            : `Inherits global default: ${fmtUsd(current.defaultMonthlyUsd)} per month.`}
+        </p>
+      )}
+
       <div className="pf-admin-table-scroll">
         <Table aria-label="Quota overrides" variant="compact">
           <Thead>
@@ -912,12 +1169,13 @@ function QuotaTab() {
               <Th>User</Th>
               <Th className="pf-admin-num">Monthly USD</Th>
               <Th>Updated</Th>
+              <Th>Action</Th>
             </Tr>
           </Thead>
           <Tbody>
             {rows.length === 0 && (
               <Tr>
-                <Td colSpan={3}>No overrides; everyone uses the global default.</Td>
+                <Td colSpan={4}>No overrides; everyone uses the global default.</Td>
               </Tr>
             )}
             {rows.map((row) => (
@@ -925,6 +1183,11 @@ function QuotaTab() {
                 <Td>{row.principal}</Td>
                 <Td className="pf-admin-num">{fmtUsd(row.monthly_usd)}</Td>
                 <Td>{fmtDate(row.updated_at)}</Td>
+                <Td>
+                  <Button variant="secondary" size="sm" onClick={() => void onRemoveRow(row.principal)}>
+                    Remove
+                  </Button>
+                </Td>
               </Tr>
             ))}
           </Tbody>
@@ -937,6 +1200,67 @@ function QuotaTab() {
 function PricingTab() {
   const prices = useAdminData(fetchPrices)
   const [search, setSearch] = useState('')
+  const [model, setModel] = useState('')
+  const [provider, setProvider] = useState('')
+  const [sourceModel, setSourceModel] = useState('')
+  const [inputCost, setInputCost] = useState('0')
+  const [outputCost, setOutputCost] = useState('0')
+  const [cacheWriteCost, setCacheWriteCost] = useState('0')
+  const [cacheReadCost, setCacheReadCost] = useState('0')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  const onSave = async () => {
+    if (!model.trim() || !provider.trim()) {
+      setError('Model and provider are required.')
+      return
+    }
+    const rates = [Number(inputCost), Number(outputCost), Number(cacheWriteCost), Number(cacheReadCost)]
+    if (!sourceModel.trim() && rates.some((value) => !Number.isFinite(value) || value < 0)) {
+      setError('Input, output, and cache rates must be finite, non-negative numbers.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      if (sourceModel.trim()) {
+        await savePrice({ model: model.trim(), provider: provider.trim(), source_model: sourceModel.trim() })
+      } else {
+        await savePrice({
+          model: model.trim(),
+          provider: provider.trim(),
+          input_cost_per_mtok: rates[0],
+          output_cost_per_mtok: rates[1],
+          cache_write_cost_per_mtok: rates[2],
+          cache_read_cost_per_mtok: rates[3],
+        })
+      }
+      setMessage('Rates saved.')
+      prices.reload()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save the rates.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onRefreshRates = async () => {
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      await refreshPricing()
+      setMessage('Pricing refreshed.')
+      prices.reload()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not refresh pricing.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase()
     return (prices.data ?? [])
@@ -951,6 +1275,47 @@ function PricingTab() {
       onRefresh={prices.reload}
       error={prices.error}
     >
+      <p className="pf-admin-muted">
+        Rates are USD per million tokens and are stored in PriceTag’s database. Saving creates a
+        managed rate that imports and discount refreshes do not overwrite. Existing request
+        charges stay unchanged; historical repricing is a separate operation.
+      </p>
+      {error && (
+        <Alert variant="danger" isInline title="Pricing operation failed">
+          <p>{error}</p>
+        </Alert>
+      )}
+      {message && <Alert variant="success" isInline title={message} />}
+      <div className="pf-admin-form">
+        <FormGroup label="Model/alias" fieldId="price-model">
+          <TextInput id="price-model" value={model} isRequired onChange={(_e, v) => setModel(v)} />
+        </FormGroup>
+        <FormGroup label="Provider" fieldId="price-provider">
+          <TextInput id="price-provider" value={provider} isRequired onChange={(_e, v) => setProvider(v)} />
+        </FormGroup>
+        <FormGroup label="Copy source model (optional)" fieldId="price-source">
+          <TextInput id="price-source" value={sourceModel} onChange={(_e, v) => setSourceModel(v)} />
+        </FormGroup>
+        <FormGroup label="Input" fieldId="price-input">
+          <TextInput id="price-input" type="number" min="0" value={inputCost} onChange={(_e, v) => setInputCost(v)} />
+        </FormGroup>
+        <FormGroup label="Output" fieldId="price-output">
+          <TextInput id="price-output" type="number" min="0" value={outputCost} onChange={(_e, v) => setOutputCost(v)} />
+        </FormGroup>
+        <FormGroup label="Cache write" fieldId="price-cache-write">
+          <TextInput id="price-cache-write" type="number" min="0" value={cacheWriteCost} onChange={(_e, v) => setCacheWriteCost(v)} />
+        </FormGroup>
+        <FormGroup label="Cache read" fieldId="price-cache-read">
+          <TextInput id="price-cache-read" type="number" min="0" value={cacheReadCost} onChange={(_e, v) => setCacheReadCost(v)} />
+        </FormGroup>
+        <Button variant="primary" isLoading={busy} isDisabled={busy} onClick={() => void onSave()}>
+          Save rates
+        </Button>
+        <Button variant="secondary" isDisabled={busy} onClick={() => void onRefreshRates()}>
+          Refresh rates
+        </Button>
+      </div>
+
       <div className="pf-admin-toolbar">
         <SearchInput
           value={search}
@@ -1002,38 +1367,150 @@ function PricingTab() {
 
 function DiscountsTab() {
   const discounts = useAdminData(fetchDiscounts)
-  const data: Discounts | null = discounts.data
+  const [version, setVersion] = useState('')
+  const [rules, setRules] = useState<DiscountRule[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const data = discounts.data
+    if (!data) return
+    setVersion(data.version)
+    setRules(data.rules.map((rule) => ({ ...rule })))
+  }, [discounts.data])
+
+  const updateRule = (index: number, patch: Partial<DiscountRule>) => {
+    setRules((current) => current.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)))
+  }
+
+  const onSave = async () => {
+    if (!version.trim()) {
+      setError('Policy version is required.')
+      return
+    }
+    if (rules.some((rule) => !rule.name.trim() || !(rule.multiplier > 0))) {
+      setError('Every rule needs a name and a multiplier greater than zero.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      await saveDiscounts(version.trim(), rules)
+      setMessage('Pricing policy saved.')
+      try {
+        await refreshPricing()
+      } catch {
+        setError('Policy saved, but the rate refresh failed. Retry Refresh rates before relying on the new rates.')
+      }
+      discounts.reload()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save the pricing policy.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <AdminSection
-      title="Pricing discounts"
+      title="Commercial pricing discounts"
       updated={discounts.updated}
       loading={discounts.loading}
       onRefresh={discounts.reload}
       error={discounts.error}
     >
-      <p className="pf-admin-muted">Version: {data?.version || '—'}</p>
-      <div className="pf-admin-table-scroll">
+      <p className="pf-admin-muted">
+        Super-admin-only effective-rate policy. Vendor list prices remain unchanged. Changes are
+        audited and apply on the next pricing refresh or Metering restart.
+      </p>
+      {error && (
+        <Alert variant="danger" isInline title="Pricing policy operation failed">
+          <p>{error}</p>
+        </Alert>
+      )}
+      {message && <Alert variant="success" isInline title={message} />}
+      <div className="pf-admin-form">
+        <FormGroup label="Policy version" fieldId="discount-version">
+          <TextInput
+            id="discount-version"
+            value={version}
+            onChange={(_event, value) => setVersion(value)}
+          />
+        </FormGroup>
+        <Button variant="primary" isLoading={busy} isDisabled={busy} onClick={() => void onSave()}>
+          Save pricing policy
+        </Button>
+        <Button
+          variant="secondary"
+          isDisabled={busy}
+          onClick={() => setRules([...rules, { name: '', provider: '', model_prefix: '', multiplier: 1 }])}
+        >
+          Add rule
+        </Button>
+      </div>
+      <div className="pf-admin-table-scroll pf-admin-rules">
         <Table aria-label="Pricing discounts" variant="compact">
           <Thead>
             <Tr>
               <Th>Rule</Th>
               <Th>Provider</Th>
               <Th>Model prefix</Th>
-              <Th className="pf-admin-num">Multiplier</Th>
+              <Th>Multiplier</Th>
+              <Th>Action</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {(data?.rules ?? []).length === 0 && (
+            {rules.length === 0 && (
               <Tr>
-                <Td colSpan={4}>No discount rules.</Td>
+                <Td colSpan={5}>No discount rules configured.</Td>
               </Tr>
             )}
-            {(data?.rules ?? []).map((rule) => (
-              <Tr key={rule.name}>
-                <Td>{rule.name}</Td>
-                <Td>{rule.provider || '—'}</Td>
-                <Td>{rule.model_prefix || '—'}</Td>
-                <Td className="pf-admin-num">{rule.multiplier}</Td>
+            {rules.map((rule, index) => (
+              <Tr key={`${rule.name}-${index}`}>
+                <Td>
+                  <TextInput
+                    aria-label={`Rule ${index + 1} name`}
+                    value={rule.name}
+                    onChange={(_event, value) => updateRule(index, { name: value })}
+                  />
+                </Td>
+                <Td>
+                  <TextInput
+                    aria-label={`Rule ${index + 1} provider`}
+                    value={rule.provider || ''}
+                    onChange={(_event, value) => updateRule(index, { provider: value })}
+                  />
+                </Td>
+                <Td>
+                  <TextInput
+                    aria-label={`Rule ${index + 1} model prefix`}
+                    value={rule.model_prefix || ''}
+                    onChange={(_event, value) => updateRule(index, { model_prefix: value })}
+                  />
+                </Td>
+                <Td>
+                  <TextInput
+                    aria-label={`Rule ${index + 1} multiplier`}
+                    type="number"
+                    min="0.0001"
+                    max="10"
+                    step="0.01"
+                    value={String(rule.multiplier)}
+                    onChange={(_event, value) =>
+                      updateRule(index, { multiplier: Number(value) || 0 })
+                    }
+                  />
+                </Td>
+                <Td>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRules((current) => current.filter((_, i) => i !== index))}
+                  >
+                    Remove
+                  </Button>
+                </Td>
               </Tr>
             ))}
           </Tbody>
@@ -1054,6 +1531,10 @@ function RestrictionsTab() {
       onRefresh={policies.reload}
       error={policies.error}
     >
+      <p className="pf-admin-muted">
+        Read-only view of users restricted by the external model-policy API. An empty
+        allowed-model list means deny-all.
+      </p>
       <div className="pf-admin-table-scroll">
         <Table aria-label="Model restrictions" variant="compact">
           <Thead>

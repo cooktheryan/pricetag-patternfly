@@ -272,6 +272,68 @@ export async function fetchSafetyNet(signal?: AbortSignal): Promise<SafetyNet> {
   }
 }
 
+export async function updateSafetyNet(
+  limit: number,
+  enforced: boolean,
+  allowedModels: string[],
+): Promise<void> {
+  await sendJson('api/v1/admin/safety-net', 'PUT', {
+    default_monthly_usd: limit,
+    enforced,
+    allowed_over_limit_models: allowedModels,
+  })
+}
+
+export interface CurrentBudget {
+  override: number | null
+  defaultMonthlyUsd: number
+}
+
+export async function fetchBudgetFor(
+  subject: string,
+  signal?: AbortSignal,
+): Promise<CurrentBudget> {
+  const payload = (await getJson(
+    `api/v1/management/budgets?subject=${encodeURIComponent(subject)}`,
+    signal,
+  )) as Record<string, unknown>
+  const data = Array.isArray(payload.data) ? payload.data : []
+  const row = data[0] as Record<string, unknown> | undefined
+  return {
+    override: row ? num(row.monthly_usd) : null,
+    defaultMonthlyUsd: num(payload.default_monthly_usd),
+  }
+}
+
+export async function setBudgetOverride(subject: string, monthlyUsd: number): Promise<void> {
+  await sendJson('api/v1/management/budgets', 'PUT', {
+    subject,
+    monthly_usd: monthlyUsd,
+  })
+}
+
+export async function removeBudgetOverride(subject: string): Promise<void> {
+  await sendJson('api/v1/management/budgets', 'DELETE', { subject })
+}
+
+export async function savePrice(body: Record<string, unknown>): Promise<void> {
+  await sendJson('api/v1/management/prices', 'PUT', body)
+}
+
+export async function refreshPricing(): Promise<void> {
+  const res = await fetch(gatewayUrl('api/v1/admin/pricing/refresh'), {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(`Pricing refresh failed (HTTP ${res.status}).`)
+}
+
+export async function saveDiscounts(version: string, rules: DiscountRule[]): Promise<void> {
+  await sendJson('api/v1/admin/pricing-discounts', 'PUT', { version, rules })
+}
+
 export async function fetchBudgets(signal?: AbortSignal): Promise<BudgetOverride[]> {
   const rows: BudgetOverride[] = []
   for (let offset = 0; offset < 1000; offset += 50) {

@@ -85,6 +85,25 @@
   min-width: 200px;
 }
 
+.pf-admin-form .pf-v6-c-check {
+  align-self: center;
+}
+
+.pf-admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--sm);
+  margin: var(--pf-t--global--spacer--sm) 0 var(--pf-t--global--spacer--md);
+}
+
+.pf-admin-rules table {
+  min-width: 760px;
+}
+
+.pf-admin-rules .pf-v6-c-form-control {
+  min-width: 130px;
+}
+
 .pf-admin-subhead {
   margin: var(--pf-t--global--spacer--md) 0 var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--lg);
