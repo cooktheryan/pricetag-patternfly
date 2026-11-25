@@ -1,0 +1,13 @@
+.pf-pricing-table {
+  margin-top: var(--pf-t--global--spacer--md);
+  overflow-x: auto;
+}
+
+.pf-pricing-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-pricing-table table {
+  min-width: 760px;
+}

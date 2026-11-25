@@ -139,9 +139,15 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 ## Phase 7 — Auxiliary states
 
-- [ ] `/welcome`, blocked (budget gate), coming-soon, Pricing dialog,
-      404 page.
-- **Accept**: reachable/equivalent where the old UI exposes them.
+- [x] `/welcome`, `/coming-soon`, `/blocked` (budget gate), the Pricing
+      dialog, and a 404 page. Pricing is available from both the Usage and
+      My team headers and reads `/api/v1/pricing` (with the
+      “unused models too” toggle using `?used=0`).
+- **Accept**: reachable where the old UI exposes them. The deployed host
+  serves the EnMaaS `/welcome` landing and 404s `/coming-soon` and
+  `/blocked`; the SPA provides branded PriceTag routes for all three, and
+  the 404/blocked states are reachable directly. Verified the pricing
+  dialog (live rate list) and `/welcome` in Playwright.
 
 ## Phase 8 — Container + OpenShift deployment
 

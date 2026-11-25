@@ -61,6 +61,7 @@ import type {
   PersonDetail,
 } from '../lib/manager'
 import { DonutCard } from '../components/dashboard/DonutCard'
+import { PricingModal } from '../components/PricingModal'
 import type { DonutDatum } from '../components/dashboard/DonutCard'
 import '../components/dashboard/dashboard.css'
 import '../components/manager/manager.css'
@@ -160,6 +161,7 @@ export function ManagerPage() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [filterQuery, setFilterQuery] = useState('')
   const [personSlug, setPersonSlug] = useState<string | null>(null)
+  const [pricingOpen, setPricingOpen] = useState(false)
   const [person, setPerson] = useState<PersonDetail | null>(null)
   const [personLoading, setPersonLoading] = useState(false)
   const [personError, setPersonError] = useState(false)
@@ -564,6 +566,9 @@ export function ManagerPage() {
                 }}
               />
             )}
+            <Button variant="secondary" onClick={() => setPricingOpen(true)}>
+              Pricing
+            </Button>
             <ToggleGroup aria-label="Time range" isCompact>
               {RANGES.map((entry) => (
                 <ToggleGroupItem
@@ -1005,6 +1010,7 @@ export function ManagerPage() {
           </Button>
         </ModalFooter>
       </Modal>
+      <PricingModal isOpen={pricingOpen} onClose={() => setPricingOpen(false)} />
     </PageSection>
   )
 }

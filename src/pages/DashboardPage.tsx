@@ -47,6 +47,7 @@ import { KpiCards } from '../components/dashboard/KpiCards'
 import { DonutCard } from '../components/dashboard/DonutCard'
 import type { DonutDatum } from '../components/dashboard/DonutCard'
 import { RecentActivityTable } from '../components/dashboard/RecentActivityTable'
+import { PricingModal } from '../components/PricingModal'
 import '../components/dashboard/dashboard.css'
 
 const INITIAL_BOUNDS = rangeBounds('mtd')
@@ -104,6 +105,7 @@ export function DashboardPage() {
   const [loadError, setLoadError] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [viewDialog, setViewDialog] = useState<ViewDialog | null>(null)
+  const [pricingOpen, setPricingOpen] = useState(false)
 
   const generation = useRef(0)
   const chartGeneration = useRef(0)
@@ -324,6 +326,9 @@ export function DashboardPage() {
             <Button variant="secondary" isDisabled={refreshing} onClick={() => void refresh(true)}>
               {refreshing ? 'Refreshing…' : 'Refresh'}
             </Button>
+            <Button variant="secondary" onClick={() => setPricingOpen(true)}>
+              Pricing
+            </Button>
             {isSuperAdmin && who?.user && (
               <Button
                 variant="link"
@@ -536,6 +541,7 @@ export function DashboardPage() {
           </Button>
         </ModalFooter>
       </Modal>
+      <PricingModal isOpen={pricingOpen} onClose={() => setPricingOpen(false)} />
     </PageSection>
   )
 }

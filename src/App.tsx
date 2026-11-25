@@ -8,6 +8,7 @@ import { ManagerPage } from './pages/ManagerPage'
 import { KeysPage, KeysUnavailablePage } from './pages/KeysPage'
 import { AdminPage } from './pages/AdminPage'
 import { AccountPage } from './pages/AccountPage'
+import { BlockedPage, ComingSoonPage, WelcomePage } from './pages/AuxPages'
 
 /** Gate shell routes on an established gateway session. */
 function RequireSession() {
@@ -163,6 +164,9 @@ export default function App() {
           />
           <Route path="/account" element={<AccountPage />} />
         </Route>
+        <Route path="/welcome" element={<WelcomePage />} />
+        <Route path="/coming-soon" element={<ComingSoonPage />} />
+        <Route path="/blocked" element={<BlockedPage />} />
         <Route path="/" element={<LandingRedirect />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

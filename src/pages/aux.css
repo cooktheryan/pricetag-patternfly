@@ -1,0 +1,20 @@
+.pf-aux-card {
+  max-width: 640px;
+}
+
+.pf-aux-card .pf-v6-c-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.pf-aux-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.pf-aux-note {
+  margin-top: var(--pf-t--global--spacer--md);
+}
