@@ -59,3 +59,17 @@ live gateway.
 npm run build      # typecheck + production bundle in dist/
 npx oxlint         # lint
 ```
+
+## Deploy
+
+The SPA runs as an unprivileged nginx container (SPA plus same-origin
+gateway proxy) in the emerg cluster namespace `pricetag-patternfly`:
+
+- Route: <https://pricetag-patternfly-pricetag-patternfly.apps.emerg.pcbk.p1.openshiftapps.com>
+- Intended image: `quay.io/redhat-et/patternfly:pricetag-ui`
+- Build and deployment details: `deploy/README.md`
+
+The current rollout pulls from the cluster's internal registry because the
+`redhat-et+enmaas` robot has pull-only access to the Quay repository. Once
+Write is granted, push the image and re-run `deploy/deploy.sh` with
+`IMAGE=quay.io/redhat-et/patternfly:pricetag-ui`.

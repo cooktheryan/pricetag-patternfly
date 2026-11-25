@@ -1,0 +1,23 @@
+# Template rendered by deploy/deploy.sh, which substitutes ${PUBLIC_HOST}
+# with the existing Route host or the cluster's generated Route host. The
+# Route is applied only after the Deployment is ready, so it is never exposed
+# without a healthy backend.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pricetag-patternfly
+  namespace: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly
+spec:
+  host: "${PUBLIC_HOST}"
+  to:
+    kind: Service
+    name: pricetag-patternfly
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -1,0 +1,38 @@
+# Fallback copy of the public Praxis test CA (valid 2026-11-24..2027-02-22).
+# deploy/deploy.sh requires CA_FILE and refreshes this ConfigMap from the
+# target gateway before applying the Deployment; update this file if the
+# gateway CA is rotated.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pricetag-gateway-ca
+  namespace: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIEEjCCAnqgAwIBAgIUSzVQVS6r+1NEDr/rzFz5ynptrjUwDQYJKoZIhvcNAQEL
+    BQAwITEfMB0GA1UEAwwWUHJheGlzIHByaXZhdGUgdGVzdCBDQTAeFw0yNjExMjQx
+    OTE4NTZaFw0yNzAyMjIxOTE4NTZaMCExHzAdBgNVBAMMFlByYXhpcyBwcml2YXRl
+    IHRlc3QgQ0EwggGiMA0GCSqGSIb3DQEBAQUAA4IBjwAwggGKAoIBgQDEJLVN/A66
+    l9LIslXtUVMIhcI8vJHSEgtmFxwPzcUKe/Qj3Abj8GDG4TtGK+58DxqaCFDP+W+C
+    9pSzj7ik2PAj961jvEDLn3wEaMfbXUNyibjO/+665cZPrevnrnCblFoPxEOtSfUy
+    0nerAyEXjGo1ynCCek2V0DaoJ5Hp1q/RQOG6nnJQcWKFiIX9n/h0t8UxNrrfyvvf
+    91mifNX1q4eJqO3IrBzRtwoJgcb35oXS5ZFk8ZvTUPC8GuMu4f7HBZ1v59emUuIq
+    BEOpqz1z36lm/n5CxARBuFB6CTpVoJS5DSWYvCECMuspExpRqgyTfn57f2UiNYHh
+    RPLmLRMnrYu1M402YWCLyWv5ZcloPeb4DgoYOkfryR3QcHdgQs73lA5t3kvfmdic
+    7s1/ebf9X2rCko1rG1gAgPCgJiiqGA3oVNoR7ZMZaUhIPRu2GEep7yuwEWi3rybG
+    PF6DV1AMEhkMdIb4hnF0Gsfwt4eLlHCkiGoLs8zLOqJQy9m2RGHx7MECAwEAAaNC
+    MEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0OBBYEFLJF
+    bpjy9LwRo/n0/eiQtCJzlXm8MA0GCSqGSIb3DQEBCwUAA4IBgQBtMjZ2AQQGIJlN
+    3QkubQkQWESvucVquIyWgsBT9bOyETTwCjWsC6d7OdYWcDjAFlYARZZTgwT8MbtA
+    AK9iHF8PGzyTSgrPKYMPG/wtfk0EEPTCMsjyrULM/IhiPS3BpyBfZakMIKGL9kMy
+    seaFcHhYdAMVdv6BgrnPkjNM65YLgT1bOL+CfmNq+mGsKq98MxNn7qNI49KgJ/Xu
+    gkMLlq/jOM9kGJUNtFyEJZhAD1bLEDxKLNenp6G9aTUaowYexQvoyei1XTFQROsl
+    BLhbAY24IL2zMJDfkVOG5vsQZW9j2wFBDwA6JkES/ihszjGvNtUnSE+8oyVV+I+W
+    sTmlE4qmRZqE0LpRSt8jPKtQVpUjbxAmuDztdJ5URBIFwM13c32YR3EVrOwZL/OX
+    g7xX2Vg1r1EZIoaa7nuPEGCWpHQ4eOueYMQ6gKuSxlHn+sjHI/t8wl+ixymvbcfB
+    6Kt+n++qUAUOH2WFUcrKAgMZtSrsVuHdJ4e6dQLC6XNSsfqDEfs=
+    -----END CERTIFICATE-----

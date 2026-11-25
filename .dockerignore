@@ -1,0 +1,15 @@
+# deploy/ is intentionally included: the Containerfile copies its nginx
+# template, entrypoint, and shared validation library.
+.git
+.github
+node_modules
+dist
+.playwright-cli
+.playwright-mcp
+docs/reference
+specs
+AGENTS.md
+README.md
+opencode.json
+*.log
+.DS_Store

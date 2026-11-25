@@ -1,0 +1,150 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pricetag-nginx-config
+  namespace: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+    
+    events {
+      worker_connections 1024;
+    }
+    
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      access_log /dev/stdout;
+      sendfile on;
+      server_tokens off;
+    
+      # The Route host is longer than nginx's 64-byte default map bucket.
+      map_hash_bucket_size 256;
+    
+      # Read-only root filesystem: all scratch space is the /tmp emptyDir.
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      fastcgi_temp_path /tmp/fastcgi;
+      uwsgi_temp_path /tmp/uwsgi;
+      scgi_temp_path /tmp/scgi;
+    
+      map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+      }
+    
+      # The gateway's session-change CSRF check requires
+      # Origin == MANAGEMENT_PUBLIC_ORIGIN and Sec-Fetch-Site != cross-site.
+      # Rewrite only a browser request whose Origin is this Route's origin; a
+      # cross-site Origin is passed through unchanged and rejected upstream.
+      map $http_origin $gateway_origin {
+        default $http_origin;
+        "${PUBLIC_ORIGIN}" "${UPSTREAM_PUBLIC_ORIGIN}";
+      }
+    
+      server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+    
+        # Hashed Vite bundles are immutable.
+        location /assets/ {
+          try_files $uri =404;
+          expires 1y;
+          add_header Cache-Control "public, immutable";
+        }
+    
+        # SPA history fallback for every client route.
+        location / {
+          try_files $uri $uri/ /index.html;
+        }
+    
+        # Gateway JSON endpoints. These are same-origin reads/writes with the
+        # session cookie; no Origin rewrite is needed (or wanted) here.
+        location ~ ^/(api|whoami|me|oauth)(/|$) {
+          proxy_pass ${UPSTREAM};
+          proxy_http_version 1.1;
+          proxy_set_header Host $proxy_host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection $connection_upgrade;
+          # The TCP peer is the fixed gateway IP; this DNS SAN is what nginx
+          # and deploy.sh verify against the private CA (nginx does not check
+          # IP SANs).
+          proxy_ssl_server_name on;
+          proxy_ssl_name ${UPSTREAM_TLS_NAME};
+          proxy_ssl_verify on;
+          proxy_ssl_trusted_certificate /etc/nginx/ca/ca.crt;
+          proxy_connect_timeout 10s;
+          proxy_read_timeout 60s;
+          proxy_send_timeout 60s;
+        }
+    
+        # The SPA owns GET /login (its own form and error state); the native form
+        # POST is forwarded to the gateway so the browser follows its 302.
+        location = /login {
+          error_page 418 = @gateway_session;
+          if ($request_method = POST) {
+            return 418;
+          }
+          try_files /index.html =404;
+        }
+    
+        # The SPA signs out with a native POST; a stray GET returns to the app.
+        location = /logout {
+          error_page 418 = @gateway_session;
+          if ($request_method = POST) {
+            return 418;
+          }
+          return 302 /dashboard;
+        }
+    
+        # Same for the impersonation confirmation POST.
+        location = /admin/impersonate {
+          error_page 418 = @gateway_session;
+          if ($request_method = POST) {
+            return 418;
+          }
+          return 302 /dashboard;
+        }
+    
+        # Shared proxy for the three session-changing POSTs: forward the browser's
+        # same-origin Origin as the gateway's public origin. Require Fetch
+        # Metadata to be present and same-origin; the gateway only rejects
+        # "cross-site", so a header-less non-browser request would otherwise pass
+        # this layer. The session cookie is also HttpOnly SameSite=Lax.
+        location @gateway_session {
+          if ($http_sec_fetch_site != "same-origin") {
+            return 403;
+          }
+          proxy_pass ${UPSTREAM};
+          proxy_http_version 1.1;
+          proxy_set_header Host $proxy_host;
+          proxy_set_header Origin $gateway_origin;
+          proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_set_header X-Forwarded-Host $host;
+          # The TCP peer is the fixed gateway IP; this DNS SAN is what nginx
+          # and deploy.sh verify against the private CA (nginx does not check
+          # IP SANs).
+          proxy_ssl_server_name on;
+          proxy_ssl_name ${UPSTREAM_TLS_NAME};
+          proxy_ssl_verify on;
+          proxy_ssl_trusted_certificate /etc/nginx/ca/ca.crt;
+          proxy_connect_timeout 10s;
+          proxy_read_timeout 60s;
+          proxy_send_timeout 60s;
+        }
+      }
+    }

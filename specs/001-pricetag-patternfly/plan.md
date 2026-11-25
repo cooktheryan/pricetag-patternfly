@@ -116,25 +116,34 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 ## Phase 8 — Container + OpenShift deployment
 
-- [ ] Multi-stage Containerfile: node build → nginx (SPA + proxy config,
-      upstream via `UPSTREAM` env), non-root, pinned digests.
-- [ ] nginx must serve the SPA with a history fallback (all non-file GETs
-      → index.html) and reverse-proxy the gateway paths (`/api`, `/login`,
-      `/logout`, `/whoami`, `/admin/impersonate`) so the native form POSTs
-      and their 302 destinations land on SPA routes — the login/logout
-      contract depends on it (test both the success and invalid-key
-      redirects through the Route).
-- [ ] Session-change CSRF: the gateway requires `Origin ===
-      MANAGEMENT_PUBLIC_ORIGIN` and `Sec-Fetch-Site != cross-site` for
-      login/logout/impersonate. Set `MANAGEMENT_PUBLIC_ORIGIN` to the Route
-      origin and ensure the proxy preserves both headers (a Route origin
-      mismatch turns every form POST into a 403).
-- [ ] Manifests: Namespace `pricetag-patternfly`, Deployment, Service,
-      Route (edge TLS) on `api.emerg.pcbk.p1.openshiftapps.com`.
-- [ ] Cluster egress: echo pod → detect egress IP → add to the AWS SG for
-      8443 (with user confirmation).
-- [ ] Deploy, verify sign-in through the Route against the live gateway.
-- **Accept**: new UI served over the cluster Route with live data.
+- [x] Multi-stage Containerfile: node build → nginx (SPA + proxy config,
+      upstream via `UPSTREAM` env), non-root, pinned base digests.
+- [x] nginx serves the SPA with a history fallback (all non-file GETs →
+      index.html) and reverse-proxies the gateway paths (`/api`, `/whoami`,
+      `/me`, `/oauth`, plus method-split `/login`, `/logout`,
+      `/admin/impersonate`) so the native form POSTs and their 302
+      destinations land on SPA routes. Verified through the Route: success
+      POST → 302 `/dashboard`; invalid-key redirects for Phase 9.
+- [x] Session-change CSRF: the proxy maps the browser's Route Origin to
+      `UPSTREAM_PUBLIC_ORIGIN` for the three session POSTs, preserves
+      `Sec-Fetch-Site`, and relies on the gateway's Origin check plus the
+      HttpOnly SameSite=Lax cookie. No gateway configuration change.
+- [x] Manifests: Namespace `pricetag-patternfly`, Deployment, Service,
+      Route (edge TLS), gateway CA ConfigMap.
+- [x] Cluster egress: egress pod in the namespace showed the two NAT EIPs
+      (`100.49.194.73` us-east-1a, `32.196.43.142` us-east-1b); both `/32`
+      ingress rules added to `sg-0641342b373ff74e7` for TCP 8443 (user
+      approved), verified from the pod.
+- [x] Deploy, verify sign-in through the Route against the live gateway.
+- **Accept**: new UI served over the cluster Route with live data. ✔
+  Deployed 2026-11-25 at
+  `https://pricetag-patternfly-pricetag-patternfly.apps.emerg.pcbk.p1.openshiftapps.com`:
+  `POST /login` → 302 `/dashboard`, `/whoami` with the session returns the
+  live administrator, and the browser loads the SPA with no console errors.
+  The rollout currently pulls from the cluster's internal registry; the
+  intended image `quay.io/redhat-et/patternfly:pricetag-ui` builds and is
+  ready, pending **Write** for the `redhat-et+enmaas` robot on the public
+  `redhat-et/patternfly` repository.
 
 ## Phase 9 — Equivalence suite + report
 

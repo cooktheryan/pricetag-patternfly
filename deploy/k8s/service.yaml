@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pricetag-patternfly
+  namespace: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly
+spec:
+  selector:
+    app.kubernetes.io/name: pricetag-patternfly
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly

@@ -1,0 +1,119 @@
+# Template rendered by deploy/deploy.sh. It substitutes ${IMAGE}, ${UPSTREAM},
+# ${UPSTREAM_PUBLIC_ORIGIN}, ${PUBLIC_ORIGIN}, and ${UPSTREAM_TLS_NAME} and
+# rejects any remaining placeholder; do not apply this file directly.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pricetag-patternfly
+  namespace: pricetag-patternfly
+  labels:
+    app.kubernetes.io/name: pricetag-patternfly
+    app.kubernetes.io/part-of: pricetag-patternfly
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pricetag-patternfly
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pricetag-patternfly
+        app.kubernetes.io/part-of: pricetag-patternfly
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ui
+          # The image ENTRYPOINT (/usr/local/bin/pricetag-entrypoint) renders
+          # the mounted nginx ConfigMap and execs nginx; no command override.
+          # Both the cluster-local registry and the public Quay repository
+          # need no image pull secret.
+          image: "${IMAGE}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: UPSTREAM
+              value: "${UPSTREAM}"
+            - name: UPSTREAM_PUBLIC_ORIGIN
+              value: "${UPSTREAM_PUBLIC_ORIGIN}"
+            - name: PUBLIC_ORIGIN
+              value: "${PUBLIC_ORIGIN}"
+            # nginx matches DNS SANs, not IP SANs. deploy.sh validates this
+            # name against the live certificate before rendering the
+            # manifest; the chain is verified with the CA below.
+            - name: UPSTREAM_TLS_NAME
+              value: "${UPSTREAM_TLS_NAME}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            # The template routes every nginx writable path to /tmp, but keep
+            # the conventional cache/run directories writable as well so a
+            # future config tweak cannot break readOnlyRootFilesystem.
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+            - name: nginx-config
+              mountPath: /etc/nginx/templates
+              readOnly: true
+            - name: gateway-ca
+              mountPath: /etc/nginx/ca
+              readOnly: true
+          # Readiness traverses the proxy to the gateway, so a bad CA, an
+          # unreachable upstream, or a broken TLS chain marks the pod
+          # unready instead of sending users to a broken page. An
+          # unauthenticated /whoami is a 302, which counts as success.
+          readinessProbe:
+            httpGet:
+              path: /whoami
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: nginx-config
+          configMap:
+            name: pricetag-nginx-config
+        # The bundle carries the public Praxis test CA; deploy/deploy.sh
+        # refreshes this ConfigMap from CA_FILE for the target environment.
+        - name: gateway-ca
+          configMap:
+            name: pricetag-gateway-ca
+            defaultMode: 0444
