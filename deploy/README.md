@@ -95,3 +95,16 @@ never the live gateway.
   `32.198.91.108:8443`.
 - Pin the image by digest for production:
   `IMAGE=quay.io/redhat-et/patternfly:pricetag-ui@sha256:<digest> deploy/deploy.sh`.
+
+
+## Container and deployment baseline
+
+- Build stage: `registry.access.redhat.com/ubi9/nodejs-24` (digest pinned).
+- Runtime: `registry.access.redhat.com/ubi9/nginx-126` (digest pinned), UID 1001,
+  `STOPSIGNAL SIGQUIT`, OCI/OpenShift labels, read-only root filesystem.
+- Deployment: two replicas with a rolling `maxUnavailable: 0` strategy,
+  hostname topology spread, PodDisruptionBudget (minAvailable 1), dedicated
+  ServiceAccount with no token mount, local `/healthz` startup/readiness/
+  liveness probes, resource and ephemeral-storage requests/limits.
+- Network: the gateway security group must allow the cluster NAT addresses
+  for every subnet the replicas can land on (currently us-east-1a/1b/1c).

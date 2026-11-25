@@ -68,6 +68,13 @@ data:
         add_header Strict-Transport-Security $hsts_header always;
         client_max_body_size 1m;
     
+        # Local health endpoint; probes must not depend on the upstream.
+        location = /healthz {
+          access_log off;
+          default_type text/plain;
+          return 200 "ok\n";
+        }
+
         # Hashed Vite bundles cache for a year. No add_header here so this
         # location inherits the server security headers.
         location /assets/ {

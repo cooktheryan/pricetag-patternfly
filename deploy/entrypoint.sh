@@ -40,5 +40,5 @@ if grep -q '\${' /tmp/nginx.conf; then
   exit 1
 fi
 
-nginx -t -c /tmp/nginx.conf
-exec nginx -c /tmp/nginx.conf -g 'daemon off;'
+nginx -t -e /dev/stderr -c /tmp/nginx.conf
+exec nginx -e /dev/stderr -c /tmp/nginx.conf -g 'daemon off;'

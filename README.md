@@ -153,3 +153,15 @@ access to `redhat-et/patternfly`.
 
 The live Deployment is pinned by manifest digest; a new tag does not change
 the running pod until `deploy/deploy.sh` is run with the new digest.
+
+## Runtime baseline
+
+- PatternFly React packages are on the current **6.7.0** release line
+  (`react-core`, `react-table`, `react-icons`) and `react-charts` 8.7.0.
+- `victory` remains **37.4.1**: victory 38 removed exports that
+  `@patternfly/react-charts` 8.7 still imports; upgrade both together.
+- Images use Red Hat UBI 9: Node.js 24 build stage and nginx 1.26 runtime,
+  both pinned by digest, running as UID 1001 with a read-only root filesystem.
+- OpenShift manifests use two replicas, a PodDisruptionBudget, a dedicated
+  ServiceAccount with no token mount, local health probes, topology spread,
+  and explicit resource/ephemeral-storage requests and limits.
