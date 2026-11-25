@@ -1,6 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { gatewayUrl } from './gateway'
 
+/** Monthly budget state carried by /whoami (and /api/v1/me/quota). */
+export interface Quota {
+  enforced: boolean
+  exempt: boolean
+  limit_usd: number
+  spent_usd: number
+  month?: string
+}
+
 /** Shape of the gateway's /whoami response. */
 export interface WhoAmI {
   user: string
@@ -10,11 +19,14 @@ export interface WhoAmI {
   keyServiceEnabled: boolean
   impersonating: boolean
   real_user: string
+  real_user_display?: string
   display_name: string
   managementEnabled?: boolean
   /** Org-scope fields: /manager visibility and the manager page KPI. */
   isManager?: boolean
   scopeSize?: number
+  /** Present when management (budgets) is enabled for this user. */
+  quota?: Quota
 }
 
 /** Distinguishes "signed out" from "the gateway could not be reached". */
@@ -35,6 +47,30 @@ const SessionContext = createContext<SessionState>({
   refresh: async () => ({ status: 'unauthed', who: null }),
 })
 
+function parseQuota(value: unknown): Quota | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const q = value as Record<string, unknown>
+  // A quota without numeric limits is not a quota; treating an empty object
+  // as one would render a false "$0 of $0" budget banner.
+  if (
+    typeof q.limit_usd !== 'number' ||
+    !Number.isFinite(q.limit_usd) ||
+    q.limit_usd < 0 ||
+    typeof q.spent_usd !== 'number' ||
+    !Number.isFinite(q.spent_usd) ||
+    q.spent_usd < 0
+  ) {
+    return undefined
+  }
+  return {
+    enforced: q.enforced === true,
+    exempt: q.exempt === true,
+    limit_usd: q.limit_usd,
+    spent_usd: q.spent_usd,
+    month: typeof q.month === 'string' ? q.month : undefined,
+  }
+}
+
 /**
  * The response comes from the same-origin gateway, but a proxy hiccup can
  * still deliver something that is not the expected object. Validate the
@@ -52,10 +88,12 @@ function parseWhoAmI(data: unknown): WhoAmI | null {
     keyServiceEnabled: d.keyServiceEnabled === true,
     impersonating: d.impersonating === true,
     real_user: typeof d.real_user === 'string' ? d.real_user : '',
+    real_user_display: typeof d.real_user_display === 'string' ? d.real_user_display : undefined,
     display_name: typeof d.display_name === 'string' ? d.display_name : '',
     managementEnabled: d.managementEnabled === true,
     isManager: d.isManager === true,
     scopeSize: typeof d.scopeSize === 'number' ? d.scopeSize : undefined,
+    quota: parseQuota(d.quota),
   }
 }
 

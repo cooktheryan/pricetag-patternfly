@@ -61,17 +61,24 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 ## Phase 3 — Usage dashboard (`/dashboard`)
 
-- [ ] Budget banner; filters (time presets, dates, model select, user
+- [x] Budget banner; filters (time presets, dates, model select, user
       multi-select, Clear All) hitting `/api/v1/dashboard/*`.
-- [ ] KPI cards (requests, tokens, cost, saved-with-comparison-select,
+- [x] KPI cards (requests, tokens, cost, saved-with-comparison-select,
       active users).
-- [ ] Charts (PF `react-charts`): hosted-vs-vendor donut, By Model / By Tool /
+- [x] Charts (PF `react-charts`): hosted-vs-vendor donut, By Model / By Tool /
       By User with metric toggles.
-- [ ] Recent Activity table (PF `react-table`), all 12 columns, live refresh,
-      row → session dialog.
-- [ ] Session-view dialog (drill-down content parity).
+- [x] Recent Activity table (PF `react-table`), all 12 columns, live refresh.
+      The live rows are informational — the deployed UI has no row
+      drill-down (the 12-column table is the older layout).
+- [x] Session-view dialog: in the live UI this is the "My view as user" /
+      "Back to admin view" confirmation (`POST /admin/impersonate`), plus the
+      impersonation banner — not a Recent Activity drill-down.
 - **Accept**: values equal old UI for same filters (dual-run suite); filters
-  and toggles functional.
+  and toggles functional. ✔ verified 2026-11-25 against the local standalone
+  stack: KPI/chart/table values cross-checked against the API payloads and
+  every filter, range preset, metric toggle, refresh (30s poll), and
+  impersonation round-trip exercised in Playwright. Numeric dual-run parity
+  lands with the Phase 9 suite.
 
 ## Phase 4 — Manager (`/manager`)
 
@@ -117,6 +124,11 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
       and their 302 destinations land on SPA routes — the login/logout
       contract depends on it (test both the success and invalid-key
       redirects through the Route).
+- [ ] Session-change CSRF: the gateway requires `Origin ===
+      MANAGEMENT_PUBLIC_ORIGIN` and `Sec-Fetch-Site != cross-site` for
+      login/logout/impersonate. Set `MANAGEMENT_PUBLIC_ORIGIN` to the Route
+      origin and ensure the proxy preserves both headers (a Route origin
+      mismatch turns every form POST into a 403).
 - [ ] Manifests: Namespace `pricetag-patternfly`, Deployment, Service,
       Route (edge TLS) on `api.emerg.pcbk.p1.openshiftapps.com`.
 - [ ] Cluster egress: echo pod → detect egress IP → add to the AWS SG for

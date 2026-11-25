@@ -1,0 +1,366 @@
+/* Layout for the usage dashboard. PatternFly supplies every control; these
+   rules only arrange the page-level blocks and the small chart legend. */
+
+.pf-dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--lg);
+}
+
+.pf-dashboard-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.pf-dashboard-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.pf-dashboard-updated {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-dashboard-error {
+  color: var(--pf-t--global--text--color--status--danger--default);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-dashboard-budget-value {
+  margin-block-start: var(--pf-t--global--spacer--xs);
+  margin-block-end: 0;
+}
+
+/* ── filter bar ──────────────────────────────────────────────────────── */
+
+.pf-dashboard-filters-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.pf-dashboard-field-label {
+  font-size: var(--pf-t--global--font--size--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.pf-dashboard-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.pf-dashboard-date {
+  width: 150px;
+}
+
+.pf-dashboard-model-select {
+  width: 220px;
+}
+
+.pf-dashboard-user-toggle {
+  min-width: 200px;
+  justify-content: space-between;
+}
+
+.pf-dashboard-user-menu {
+  min-width: 280px;
+}
+
+.pf-dashboard-user-menu .pf-v6-c-menu__footer {
+  display: flex;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+/* ── KPI cards ───────────────────────────────────────────────────────── */
+
+.pf-dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.pf-dashboard-kpi {
+  min-height: 130px;
+  text-align: center;
+}
+
+.pf-dashboard-kpi .pf-v6-c-card__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: var(--pf-t--global--spacer--md);
+}
+
+.pf-dashboard-kpi-label {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.6875rem;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.pf-dashboard-kpi-value {
+  display: block;
+  margin-block-start: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--3xl);
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The --default nonstatus tokens are the light tints in the light theme;
+   the 400 steps are the readable values the legacy cards use. */
+.pf-dashboard-kpi--blue .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--blue--400);
+}
+
+.pf-dashboard-kpi--green .pf-dashboard-kpi-value,
+.pf-dashboard-kpi--saved .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--green--400);
+}
+
+.pf-dashboard-kpi--orange .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--orange--400);
+}
+
+.pf-dashboard-kpi--purple .pf-dashboard-kpi-value {
+  color: var(--pf-t--global--color--nonstatus--purple--400);
+}
+
+/* The saved card is the only highlighted KPI in the legacy layout. */
+.pf-dashboard-kpi--saved {
+  border-color: var(--pf-t--global--border--color--status--success--default);
+  background-color: color-mix(
+    in srgb,
+    var(--pf-t--global--color--nonstatus--green--default) 6%,
+    var(--pf-t--global--background--color--primary--default)
+  );
+}
+
+.pf-dashboard-kpi-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pf-t--global--spacer--xs);
+  margin-block-start: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.pf-dashboard-savings-select {
+  display: inline-block;
+  width: min(150px, 100%);
+}
+
+.pf-dashboard-savings-select select {
+  font-size: var(--pf-t--global--font--size--xs);
+}
+
+.pf-dashboard-kpi-note {
+  flex-basis: 100%;
+}
+
+/* ── charts ──────────────────────────────────────────────────────────── */
+
+/* Two-line titles ("Token Usage · Hosted vs Vendor") must not push one
+   donut lower than the others. */
+.pf-dashboard-chart-card .pf-v6-c-card__title {
+  display: flex;
+  align-items: center;
+  min-height: 3.2em;
+}
+
+.pf-dashboard-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.pf-dashboard-donut {
+  width: 100%;
+  max-width: 240px;
+}
+
+.pf-dashboard-donut svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.pf-dashboard-chart-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 220px;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-dashboard-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-dashboard-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  min-width: 0;
+}
+
+.pf-dashboard-legend-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.pf-dashboard-legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-dashboard-chart-footer {
+  align-self: flex-start;
+}
+
+/* ── recent activity ─────────────────────────────────────────────────── */
+
+.pf-dashboard-table-scroll {
+  overflow-x: auto;
+}
+
+/* The legacy Recent Activity table is 12px with 8px cell padding so twelve
+   columns still fit a content area narrower than the old full-width page.
+   PatternFly's default 24px/16px padding alone costs ~480px across twelve
+   columns. */
+.pf-dashboard-table-scroll table .pf-v6-c-table__th,
+.pf-dashboard-table-scroll table .pf-v6-c-table__td {
+  padding-block: var(--pf-t--global--spacer--sm);
+  padding-inline: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--xs);
+}
+
+.pf-dashboard-recent .pf-v6-c-card__body {
+  padding: var(--pf-t--global--spacer--md);
+}
+
+/* PF's table cell rules set white-space on td/th; be explicit so the
+   compact twelve-column table keeps headers readable and time cells on one
+   line without widening the table past its container. */
+.pf-dashboard-table-scroll th {
+  white-space: normal;
+}
+
+.pf-dashboard-table-scroll td.pf-dashboard-nowrap {
+  white-space: nowrap;
+}
+
+.pf-dashboard-user .pf-dashboard-muted {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-dashboard-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-dashboard-muted {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--xs);
+}
+
+.pf-dashboard-user {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+.pf-dashboard-user > div {
+  min-width: 0;
+}
+
+.pf-dashboard-user > div > div:first-child {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-dashboard-status {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.pf-dashboard-status--ok {
+  color: var(--pf-t--global--text--color--status--success--default);
+}
+
+.pf-dashboard-status--error {
+  color: var(--pf-t--global--text--color--status--danger--default);
+}
+
+.pf-dashboard-status--unknown {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.pf-dashboard-provider--anthropic {
+  color: var(--pf-t--global--color--nonstatus--orange--default);
+}
+
+.pf-dashboard-provider--openai {
+  color: var(--pf-t--global--color--nonstatus--green--default);
+}
+
+.pf-dashboard-provider--other {
+  color: var(--pf-t--global--color--nonstatus--teal--default);
+}
+
+.pf-dashboard-cached {
+  color: var(--pf-t--global--color--nonstatus--teal--default);
+}
+
+.pf-dashboard-cache-write {
+  color: var(--pf-t--global--color--nonstatus--purple--default);
+}
+
+@media (max-width: 1200px) {
+  .pf-dashboard-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .pf-dashboard-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .pf-dashboard-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

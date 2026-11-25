@@ -5,8 +5,8 @@ import logo from '../assets/red-hat-logo.svg'
 export function Brand() {
   return (
     <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
-      <FlexItem>
-        <img src={logo} alt="Red Hat" height={28} />
+      <FlexItem flex={{ default: 'flexNone' }}>
+        <img src={logo} alt="Red Hat" height={28} width={37} />
       </FlexItem>
       <FlexItem className="app-brand-name">PriceTag</FlexItem>
     </Flex>
