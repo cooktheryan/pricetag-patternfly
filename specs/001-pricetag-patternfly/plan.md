@@ -97,11 +97,17 @@ Old-UI source: `~/git/pricetag-metering` @ `e4ba826`.
 
 ## Phase 5 — My keys (`/management`)
 
-- [ ] Tabs (My keys / Create key); key table (search, status filter, page
-      size, pagination, revoke); create-key flow with reveal-once secret.
-- [ ] Key-expiry display with remaining time.
+- [x] Tabs (My keys / Create key); key table (search, status filter, page
+      size, pagination, revoke); create-key flow with a reveal-once secret
+      (Copy/Download only — the secret is never rendered or stored).
+- [x] Key-expiry display with a live remaining-time countdown.
 - **Accept**: create → list → revoke round-trip on local stack matches old
-  UI behavior (allowance-races/key-controls tests as reference).
+  UI behavior (allowance-races/key-controls tests as reference). ✔ verified
+  2026-11-25: created `phase5-ui`, confirmed the reveal-once panel, listed it
+  as active with expiry, revoked it through the PF confirmation dialog, and
+  saw it as revoked under the All filter. The deployed `/me/keys` response
+  omits `has_more`; the loader also accepts a short page as the end while
+  keeping the live `has_more` contract.
 
 ## Phase 6 — Admin console (`/admin`)
 

@@ -1,0 +1,83 @@
+/* Layout for the personal API-key page. PatternFly supplies the controls;
+   these rules add the key-specific cell and reveal-once panel styling. */
+
+.pf-keys-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--lg);
+}
+
+.pf-keys-sub {
+  margin: var(--pf-t--global--spacer--xs) 0 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-keys-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--md);
+}
+
+.pf-keys-table-scroll {
+  overflow-x: auto;
+}
+
+.pf-keys-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-keys-id {
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--pf-t--global--font--size--xs);
+  overflow-wrap: anywhere;
+}
+
+.pf-keys-expiry {
+  font-size: var(--pf-t--global--font--size--sm);
+  white-space: nowrap;
+}
+
+.pf-keys-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  margin-top: var(--pf-t--global--spacer--md);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-keys-note {
+  margin-top: var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.pf-keys-reveal {
+  margin-top: var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--status--success--default);
+  background-color: color-mix(
+    in srgb,
+    var(--pf-t--global--color--nonstatus--green--default) 6%,
+    var(--pf-t--global--background--color--primary--default)
+  );
+}
+
+.pf-keys-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  margin-top: var(--pf-t--global--spacer--sm);
+}
+
+.pf-keys-copied {
+  color: var(--pf-t--global--text--color--status--success--default);
+  font-size: var(--pf-t--global--font--size--sm);
+}
