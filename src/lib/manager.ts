@@ -285,7 +285,14 @@ export async function fetchUsage(
 ): Promise<OrgUsageRow[]> {
   const params = [`range=${encodeURIComponent(range)}`]
   if (root) params.push(`root=${encodeURIComponent(root)}`)
-  const rows = asArray(await getJson(`api/v1/org/usage?${params.join('&')}`, signal))
+  const payload = await getJson(`api/v1/org/usage?${params.join('&')}`, signal)
+  // Standalone deployments return a bare row array; cluster deployments wrap
+  // the rows in a {rows, totals} envelope (the totals stay inclusive when the
+  // country policy hides people from the table). Accept both shapes and keep
+  // deriving the page numbers from the rows, matching the standalone contract.
+  const rows = Array.isArray(payload)
+    ? payload
+    : asArray(asRecord(payload).rows ?? [])
   return rows.map((entry) => {
     const d = asRecord(entry)
     return {
