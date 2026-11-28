@@ -141,15 +141,42 @@ DNS_CIDR="$dns_ip/32"
 # Resolve every IPv4 address the hostname currently publishes. A Kubernetes
 # NetworkPolicy cannot follow DNS rotation, so re-run this deploy if the
 # gateway's records change; for a literal address this is a single /32.
-if is_ipv4 "$upstream_host"; then
-  gateway_ips="$upstream_host"
+GATEWAY_BLOCKS=""
+if [ -n "${UPSTREAM_EGRESS_NAMESPACE:-}" ] || [ -n "${UPSTREAM_EGRESS_APP:-}" ]; then
+  # In-cluster Service upstreams: OVN enforces egress ipBlock rules against
+  # the post-NAT destination (the backend pod), so a ClusterIP/32 never
+  # matches pod-to-Service traffic. A destination selector matches the
+  # backend pods directly instead. Both values are rendered into YAML, so
+  # they are validated as Kubernetes label values first; and no upstream DNS
+  # resolution is needed in this mode (a cluster-local Service name is not
+  # resolvable from the deploy host anyway).
+  [ -n "${UPSTREAM_EGRESS_NAMESPACE:-}" ] && [ -n "${UPSTREAM_EGRESS_APP:-}" ] \
+    || fail "UPSTREAM_EGRESS_NAMESPACE and UPSTREAM_EGRESS_APP must be set together"
+  case "$UPSTREAM_EGRESS_NAMESPACE" in
+    ''|*[!a-z0-9-]*) fail "UPSTREAM_EGRESS_NAMESPACE must be a lowercase DNS-1121 label (a-z, 0-9, '-')" ;;
+    -*|*-) fail "UPSTREAM_EGRESS_NAMESPACE must not start or end with '-'" ;;
+  esac
+  [ "${#UPSTREAM_EGRESS_NAMESPACE}" -le 63 ] || fail "UPSTREAM_EGRESS_NAMESPACE must be 1-63 characters"
+  case "$UPSTREAM_EGRESS_APP" in
+    ''|*[!A-Za-z0-9._-]*) fail "UPSTREAM_EGRESS_APP must be a Kubernetes label value (alphanumeric, '-', '_', '.')" ;;
+  esac
+  # A label value must also begin and end with an alphanumeric character.
+  case "$UPSTREAM_EGRESS_APP" in
+    [A-Za-z0-9]|[A-Za-z0-9]*[A-Za-z0-9]) ;;
+    *) fail "UPSTREAM_EGRESS_APP must start and end with an alphanumeric character" ;;
+  esac
+  [ "${#UPSTREAM_EGRESS_APP}" -le 63 ] || fail "UPSTREAM_EGRESS_APP must be 1-63 characters"
+  GATEWAY_BLOCKS=$(printf '        - namespaceSelector:\n            matchLabels:\n              kubernetes.io/metadata.name: %s\n          podSelector:\n            matchLabels:\n              app: %s\n' "$UPSTREAM_EGRESS_NAMESPACE" "$UPSTREAM_EGRESS_APP")
 else
-  gateway_ips=""
-  if command -v getent >/dev/null 2>&1; then
-    gateway_ips=$(getent ahostsv4 "$upstream_host" 2>/dev/null | awk '$2 == "STREAM" { print $1 }' | sort -u)
-  fi
-  if [ -z "$gateway_ips" ]; then
-    gateway_ips=$(python3 - "$upstream_host" <<'PY'
+  if is_ipv4 "$upstream_host"; then
+    gateway_ips="$upstream_host"
+  else
+    gateway_ips=""
+    if command -v getent >/dev/null 2>&1; then
+      gateway_ips=$(getent ahostsv4 "$upstream_host" 2>/dev/null | awk '$2 == "STREAM" { print $1 }' | sort -u)
+    fi
+    if [ -z "$gateway_ips" ]; then
+      gateway_ips=$(python3 - "$upstream_host" <<'PY'
 import socket, sys
 try:
     infos = socket.getaddrinfo(sys.argv[1], None, socket.AF_INET, socket.SOCK_STREAM)
@@ -164,28 +191,29 @@ if not seen:
     sys.exit(1)
 print("\n".join(seen))
 PY
-    ) || fail "could not resolve $upstream_host for the NetworkPolicy"
+      ) || fail "could not resolve $upstream_host for the NetworkPolicy"
+    fi
   fi
-fi
-[ -n "$gateway_ips" ] || fail "could not resolve $upstream_host for the NetworkPolicy"
-GATEWAY_BLOCKS=""
-for gateway_ip in $gateway_ips; do
-  case "$gateway_ip" in
-    0.*|127.*|169.254.*)
-      fail "UPSTREAM resolves to the unspecified, loopback, or link-local address $gateway_ip"
-      ;;
-  esac
-  printf -v GATEWAY_BLOCKS '%s        - ipBlock:\n            cidr: %s/32\n' "$GATEWAY_BLOCKS" "$gateway_ip"
-done
-if [ "${ALLOW_PRIVATE_UPSTREAM:-0}" != "1" ]; then
-  if ! python3 - $gateway_ips <<'PY'
+  [ -n "$gateway_ips" ] || fail "could not resolve $upstream_host for the NetworkPolicy"
+  for gateway_ip in $gateway_ips; do
+    is_ipv4 "$gateway_ip" || fail "UPSTREAM resolved to a non-IPv4 address: $gateway_ip"
+    case "$gateway_ip" in
+      0.*|127.*|169.254.*)
+        fail "UPSTREAM resolves to the unspecified, loopback, or link-local address $gateway_ip"
+        ;;
+    esac
+    printf -v GATEWAY_BLOCKS '%s        - ipBlock:\n            cidr: %s/32\n' "$GATEWAY_BLOCKS" "$gateway_ip"
+  done
+  if [ "${ALLOW_PRIVATE_UPSTREAM:-0}" != "1" ]; then
+    if ! python3 - $gateway_ips <<'PY'
 import ipaddress, sys
 for value in sys.argv[1:]:
     if not ipaddress.ip_address(value).is_global:
         sys.exit(1)
 PY
-  then
-    fail "UPSTREAM resolves to a non-global address; set ALLOW_PRIVATE_UPSTREAM=1 for an internal gateway"
+    then
+      fail "UPSTREAM resolves to a non-global address; set ALLOW_PRIVATE_UPSTREAM=1 for an internal gateway"
+    fi
   fi
 fi
 netpol=$(mktemp "${TMPDIR:-/tmp}/pricetag-networkpolicy.XXXXXX")

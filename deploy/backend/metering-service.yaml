@@ -1,0 +1,245 @@
+# metering-service: the PriceTag management API the PatternFly UI proxies to
+# (/whoami, /login, /api/v1/*). Built from pricetag-metering source into the
+# internal registry (metering-build.yaml). Env mirrors the EnMaaS-opps
+# metering-service template plus the standalone-stack session/CSRF settings.
+#
+# Rendered by deploy.sh:
+#   ${MANAGEMENT_PUBLIC_ORIGIN}  the UI Route origin (CSRF check + cookie)
+#   ${GATEWAY_URL}               public praxis gateway origin (welcome link)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/part-of: pricetag-backend
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/part-of: pricetag-backend
+rules:
+  # PIPELINE_CONFIGMAP / ROUTING_OVERLAY_CONFIGMAPS reads.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["praxis-config", "praxis-routing-openai", "praxis-routing-unified"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/part-of: pricetag-backend
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: metering-service
+subjects:
+  - kind: ServiceAccount
+    name: metering-service
+    namespace: pricetag-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/component: metering
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metering-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: metering-service
+        app.kubernetes.io/name: metering-service
+        app.kubernetes.io/component: metering
+        app.kubernetes.io/part-of: pricetag-backend
+    spec:
+      automountServiceAccountToken: true
+      serviceAccountName: metering-service
+      containers:
+        - name: metering-service
+          image: image-registry.openshift-image-registry.svc:5000/pricetag-backend/metering-service:latest
+          imagePullPolicy: Always
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: DB_CONNECTION_URL
+                  name: maas-db-config
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Directory users.
+            - name: ADMIN_USERS
+              value: admin@pricetag-backend.invalid
+            - name: SUPERADMIN_USERS
+              value: admin@pricetag-backend.invalid
+            # Sessions. The UI's nginx rewrites the browser Origin to exactly
+            # this value, which the logout/impersonate CSRF check compares
+            # against (internal/handler/auth.go confirmSessionChange).
+            - name: MANAGEMENT_PUBLIC_ORIGIN
+              value: "${MANAGEMENT_PUBLIC_ORIGIN}"
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: session-secret
+                  name: service-auth
+            # Gateway-to-metering ingestion auth (praxis external_metering).
+            - name: M2M_AUTH_REQUIRED
+              value: "true"
+            - name: M2M_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: metering-token
+                  name: service-auth
+            # Partner/management API auth (bootstrap provisioning + UI reads).
+            - name: USER_MANAGEMENT_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: management-token
+                  name: service-auth
+            - name: MODEL_POLICY_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: model-policy-token
+                  name: service-auth
+            - name: USAGE_REPORT_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: usage-report-token
+                  name: service-auth
+            - name: MODEL_CATALOG_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: model-catalog-token
+                  name: service-auth
+            # Key service.
+            - name: MAAS_API_URL
+              value: http://maas-api:8080
+            - name: MAAS_VALIDATE_URL
+              value: http://maas-api:8080/internal/v1/api-keys/validate
+            - name: MAAS_TENANT
+              value: models-as-a-service
+            - name: MAAS_SUBSCRIPTION_NAME
+              value: pricetag-backend
+            - name: PARTNER_USER_KEY_GROUP
+              value: pricetag-users
+            # Gateway pipeline + routing overlays (Role above grants the reads).
+            - name: PIPELINE_CONFIGMAP
+              value: praxis-config
+            - name: PIPELINE_CONFIGMAP_KEY
+              value: praxis.yaml
+            - name: ROUTING_OVERLAY_CONFIGMAPS
+              value: praxis-routing-openai,praxis-routing-unified
+            # Entitlements.
+            - name: ALLOW_UNAUTHENTICATED_ADMIN
+              value: "false"
+            - name: QUOTA_ENFORCEMENT_ENABLED
+              value: "false"
+            - name: MONTHLY_TOKEN_QUOTA
+              value: "10000000000"
+            # Welcome-page links.
+            - name: WELCOME_GATEWAY_URL
+              value: "${GATEWAY_URL}"
+            - name: WELCOME_DASHBOARD_URL
+              value: "${MANAGEMENT_PUBLIC_ORIGIN}"
+            # Dashboards.
+            - name: DASHBOARD_USE_ROLLUPS
+              value: "false"
+            - name: LIVE_ROLLUPS_ENABLED
+              value: "false"
+            - name: MONTH_SPEND_ENABLED
+              value: "true"
+            - name: MONTH_SPEND_WRITE_ENABLED
+              value: "true"
+            - name: TZ
+              value: UTC
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9902
+              name: metrics
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/component: metering
+    app.kubernetes.io/part-of: pricetag-backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9902"
+spec:
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: http
+    - name: metrics
+      port: 9902
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    app: metering-service
