@@ -1,0 +1,531 @@
+# Bootstrap: provisions the initial identities and one-time API keys through
+# the metering partner API (which persists them via maas-api), sets dashboard
+# roles, and seeds model pricing. Adapted from the enmaas-mocker bootstrap
+# (proven in-cluster flow). The minted keys land in Secret/client-keys.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: client-keys
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+type: Opaque
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-settings
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+data:
+  readiness-seconds: "180"
+  rotate: "false"
+  users.json: |
+    [
+      {"name": "alice", "user_id": "89e8e325-84c6-4b32-aa25-945baad38706", "email": "alice@pricetag-backend.invalid"},
+      {"name": "bob", "user_id": "4a5ddd8d-984f-4a06-8238-5c1e5929b27b", "email": "bob@pricetag-backend.invalid"},
+      {"name": "admin", "user_id": "6e597562-0455-4162-ae85-4f8c48db80a9", "email": "admin@pricetag-backend.invalid"}
+    ]
+  models.json: |
+    ["gpt-5.4", "gpt-5.3-codex"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-code
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+data:
+  common.py: |
+    """Credential-safe HTTP and file helpers for the bootstrap Job."""
+    import json
+    import os
+    from pathlib import Path
+    import urllib.error
+    import urllib.request
+    import uuid
+
+
+    class APIError(RuntimeError):
+        def __init__(self, status, method, path):
+            self.status = status
+            super().__init__(f'{method} {path}: HTTP {status}')
+
+
+    def request(base, path, method='GET', body=None, token=None, headers=None, timeout=30):
+        hdr = {'Content-Type': 'application/json', **(headers or {})}
+        if token:
+            hdr['Authorization'] = 'Bearer ' + token
+        data = None if body is None else json.dumps(body).encode()
+        req = urllib.request.Request(base.rstrip('/') + path, data=data, headers=hdr, method=method)
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(req, timeout=timeout) as response:
+                payload = response.read()
+                return json.loads(payload) if payload else None
+        except urllib.error.HTTPError as error:
+            # Error bodies can contain key material. Never include them in diagnostics.
+            raise APIError(error.code, method, path) from None
+  bootstrap_keys.py: |
+    """Identity validation and API provisioning for the bootstrap Job."""
+    import json
+    import re
+    import urllib.parse
+    import uuid
+
+    from common import request
+
+
+    def validate_users(users):
+        if not isinstance(users, list) or not users or any(not isinstance(u, dict) for u in users):
+            raise ValueError('users.json must contain at least one identity')
+        for field in ('name', 'user_id', 'email'):
+            if any(not isinstance(u.get(field), str) for u in users):
+                raise ValueError(f'Invalid user {field}')
+            if len({u[field] for u in users}) != len(users):
+                raise ValueError(f'Duplicate user {field}')
+        for user in users:
+            if not re.fullmatch(r'[a-z][a-z0-9_-]{0,40}', user['name']):
+                raise ValueError('User name must be a safe local filename')
+            uuid.UUID(user['user_id'])
+            if not re.fullmatch(r'[^\s@]+@[^\s@]+\.invalid', user['email']):
+                raise ValueError('Use synthetic email addresses ending in .invalid')
+        return users
+
+
+    def provision(user, meter, maas, token, *, store, rotate=False, call=request, models=None, policy_token=None):
+        name, uid = user['name'], user['user_id']
+        base = '/api/v1/users/' + urllib.parse.quote(uid, safe='')
+        current = call(meter, base, method='PUT', token=token, body={'tags': {
+            'email': user['email'], 'first_name': name, 'last_name': 'Demo', 'origin': 'pricetag-backend'}})
+        if not current.get('active', False):
+            raise ValueError(f'{name}: identity is inactive; reactivate it deliberately before provisioning')
+        saved = store.load(user)
+        key_name = 'pricetag-backend-' + name
+        if saved and not rotate:
+            result = call(maas, '/internal/v1/api-keys/validate', method='POST', body={'key': saved['key']})
+            if not result.get('valid') or result.get('username') != user['email']:
+                raise ValueError(f'{name}: saved key is invalid, expired, or belongs to another identity; use --rotate')
+            print(f'{name}: reused active key')
+        else:
+            existing = call(meter, base + '/keys', token=token)['keys']
+            matching = [k for k in existing if k.get('name') == key_name and k.get('status') == 'active']
+            if matching and not rotate:
+                raise ValueError(f'{name}: an active key exists but its saved secret is missing; restore it or use --rotate')
+            if any(not old.get('partner_managed') for old in matching):
+                raise ValueError(f'{name}: refusing to rotate an unmanaged key')
+            if any(not isinstance(old.get('id'), str) or not old['id'] for old in matching):
+                raise ValueError(f'{name}: a key record is missing its id; refusing to rotate blindly')
+            for old in matching:
+                call(meter, base + '/keys/' + urllib.parse.quote(old['id'], safe=''), method='DELETE', token=token)
+            minted = call(meter, base + '/keys', method='POST', token=token, body={'name': key_name})
+            if not isinstance(minted.get('key'), str) or not minted['key']:
+                raise ValueError(f'{name}: MaaS did not return a one-time key')
+            minted.update(user_id=uid, email=user['email'])
+            try:
+                store.save(user, minted)
+            except (OSError, RuntimeError):
+                call(meter, base + '/keys/' + urllib.parse.quote(minted['id'], safe=''), method='DELETE', token=token)
+                raise
+            result = call(maas, '/internal/v1/api-keys/validate', method='POST', body={'key': minted['key']})
+            if not result.get('valid') or result.get('username') != user['email']:
+                raise ValueError(f'{name}: newly minted key failed MaaS validation')
+            print(f'{name}: provisioned active key')
+        # The model-policy allowlist endpoint authenticates with
+        # MODEL_POLICY_API_SECRET, not the user-management secret.
+        call(meter, '/api/v1/model-policies/users/' + urllib.parse.quote(uid, safe='') + '/allowlist',
+             method='PUT', token=policy_token or token, body={'models': models if models is not None else ['gpt-5.4']})
+  bootstrap_job.py: |
+    #!/usr/bin/env python3
+    """In-cluster initial-key provisioning. Python standard library only."""
+    import base64
+    import json
+    import os
+    from pathlib import Path
+    import ssl
+    import sys
+    import time
+    import urllib.error
+    import urllib.request
+
+    from bootstrap_keys import provision, validate_users
+    from common import APIError, request
+
+
+    class UncertainWrite(ValueError):
+        """Do not revoke a key when its Secret write cannot be resolved."""
+
+
+    class SecretStore:
+        def __init__(self, namespace, service_account=Path('/var/run/secrets/kubernetes.io/serviceaccount')):
+            self.path = '/api/v1/namespaces/' + namespace + '/secrets/client-keys'
+            host = os.environ.get('KUBERNETES_SERVICE_HOST', 'kubernetes.default.svc')
+            port = os.environ.get('KUBERNETES_SERVICE_PORT_HTTPS', '443')
+            self.base = f'https://[{host}]:{port}' if ':' in host else f'https://{host}:{port}'
+            self.service_account = Path(service_account)
+            self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=str(self.service_account / 'ca.crt'))))
+
+        def call(self, method, body=None):
+            token = (self.service_account / 'token').read_text().strip()
+            req = urllib.request.Request(self.base + self.path, method=method,
+                headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+                data=None if body is None else json.dumps(body).encode())
+            try:
+                with self.opener.open(req, timeout=15) as response:
+                    return json.load(response)
+            except urllib.error.HTTPError as error:
+                raise APIError(error.code, method, self.path) from None
+            except OSError:
+                raise RuntimeError('Kubernetes Secret request failed') from None
+
+        @staticmethod
+        def record(document, user):
+            value = document.get('data', {}).get(user['name'] + '.json')
+            if value is None:
+                return None
+            try:
+                record = json.loads(base64.b64decode(value, validate=True))
+                if record['user_id'] != user['user_id'] or record['email'] != user['email'] or not isinstance(record['key'], str) or not record['key'] or not isinstance(record['id'], str):
+                    raise ValueError()
+                return record
+            except (ValueError, KeyError, TypeError):
+                raise ValueError(f'{user["name"]}: saved Secret record does not match the configured identity') from None
+
+        def load(self, user):
+            return self.record(self.call('GET'), user)
+
+        def save(self, user, minted):
+            document = self.call('GET')
+            document.setdefault('data', {})[user['name'] + '.json'] = base64.b64encode(json.dumps(minted).encode()).decode()
+            try:
+                # resourceVersion makes concurrent writes fail rather than overwrite.
+                self.call('PUT', document)
+            except RuntimeError as error:
+                try:
+                    saved = self.load(user)
+                except (RuntimeError, ValueError):
+                    raise UncertainWrite('Secret persistence is uncertain; inspect the Secret before explicit rotation') from None
+                if saved and saved.get('id') == minted['id'] and saved.get('key') == minted['key']:
+                    return
+                raise error
+
+
+    def wait_ready(meter, maas, seconds, call=request):
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                call(meter, '/health', timeout=5)
+                call(maas, '/health', timeout=5)
+                return
+            except (OSError, RuntimeError):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('MaaS/metering readiness timed out') from None
+                time.sleep(min(2, max(0, deadline - time.monotonic())))
+
+
+    def run(settings_dir=Path('/settings'), auth_dir=Path('/auth'), store=None, rotate=False):
+        settings_dir = Path(settings_dir)
+        seconds = int((settings_dir / 'readiness-seconds').read_text().strip())
+        if seconds <= 0:
+            raise ValueError('readiness-seconds must be positive')
+        configured_rotation = (settings_dir / 'rotate').read_text().strip().lower()
+        if configured_rotation != 'false':
+            raise ValueError('Persistent rotation is disabled; rerun bootstrap with --rotate deliberately')
+        users = validate_users(json.loads((settings_dir / 'users.json').read_text()))
+        models = json.loads((settings_dir / 'models.json').read_text()) if (settings_dir / 'models.json').exists() else ['gpt-5.4']
+        if not isinstance(models, list) or not models or any(not isinstance(m, str) or not m for m in models) or len(set(models)) != len(models):
+            raise ValueError('Invalid configured models')
+        meter, maas = 'http://metering-service:8080', 'http://maas-api:8080'
+        wait_ready(meter, maas, seconds)
+        token = (Path(auth_dir) / 'management-token').read_text().strip()
+        policy_token = (Path(auth_dir) / 'model-policy-token').read_text().strip()
+        store = store or SecretStore(os.environ['POD_NAMESPACE'])
+        for user in users:
+            provision(user, meter, maas, token, store=store, rotate=rotate, models=models, policy_token=policy_token)
+        print('Initial client keys are ready in Secret/client-keys')
+
+
+    def main(argv=None):
+        args = sys.argv[1:] if argv is None else argv
+        try:
+            if args not in ([], ['--rotate']):
+                raise ValueError('Only --rotate is supported')
+            run(rotate='--rotate' in args)
+        except APIError as error:
+            print(f'Bootstrap API request failed: {error}', file=sys.stderr)
+            return 1
+        except (OSError, ValueError, RuntimeError, KeyError) as error:
+            print(f'Bootstrap failed ({type(error).__name__}); check service readiness, saved key validity, and Secret permissions', file=sys.stderr)
+            return 1
+        return 0
+
+
+    if __name__ == '__main__':
+        raise SystemExit(main())
+  dashboard-roles.sql: |
+    -- Partner-user roles are authoritative for dashboard authorization.
+    -- ADMIN_USERS is only a fallback for identities outside that directory.
+    BEGIN;
+    SET LOCAL lock_timeout = '5s';
+    SET LOCAL statement_timeout = '30s';
+
+    CREATE TEMP TABLE configured_dashboard_admins ON COMMIT DROP AS
+    SELECT DISTINCT username
+    FROM regexp_split_to_table(:'admin_users', '[[:space:],]+') AS username
+    WHERE username <> '';
+
+    -- Retry the transaction until provisioning has created every configured admin.
+    -- A failed assertion rolls back all role changes.
+    SELECT 1 / CASE WHEN NOT EXISTS (
+        SELECT 1 FROM configured_dashboard_admins admins
+        WHERE NOT EXISTS (
+            SELECT 1 FROM partner_users users
+            WHERE users.tags->>'email' = admins.username
+              AND users.tags->>'origin' = 'pricetag-backend'
+              AND users.active
+        )
+    ) THEN 1 ELSE 0 END;
+
+    -- Only manage pricetag-backend identities. The configured admin gets
+    -- super_admin (the /admin console, its APIs, and impersonation are all
+    -- gated on the partner super_admin role); everyone else stays a user.
+    -- Existing super_admins are never downgraded.
+    UPDATE partner_users users
+    SET role = CASE WHEN admins.username IS NOT NULL THEN 'super_admin' ELSE 'user' END,
+        updated_by = 'pricetag-backend-bootstrap',
+        updated_at = NOW()
+    FROM (
+        SELECT users.user_id, admins.username
+        FROM partner_users users
+        LEFT JOIN configured_dashboard_admins admins ON users.tags->>'email' = admins.username
+        WHERE users.tags->>'origin' = 'pricetag-backend'
+          AND users.active AND users.role <> 'super_admin'
+    ) admins
+    WHERE users.user_id = admins.user_id
+      AND users.role IS DISTINCT FROM CASE WHEN admins.username IS NOT NULL THEN 'super_admin' ELSE 'user' END;
+    COMMIT;
+  model-pricing.sql: |
+    -- Run after metering migrations, before any inference. Representative
+    -- per-Mtok pricing for the routed OpenAI models so the dashboard shows
+    -- meaningful costs; adjust via the admin pricing tab as needed.
+    BEGIN;
+    SET LOCAL lock_timeout = '5s';
+    SET LOCAL statement_timeout = '30s';
+    INSERT INTO model_pricing
+        (model, provider, input_cost_per_mtok, output_cost_per_mtok,
+         cache_write_cost_per_mtok, cache_read_cost_per_mtok)
+    VALUES ('gpt-5.4', 'openai', 1.25, 10.00, 1.25, 0.125),
+           ('gpt-5.3-codex', 'openai', 1.25, 10.00, 1.25, 0.125)
+    ON CONFLICT (model) DO UPDATE SET
+        provider = 'openai', input_cost_per_mtok = 1.25, output_cost_per_mtok = 10.00,
+        cache_write_cost_per_mtok = 1.25, cache_read_cost_per_mtok = 0.125;
+    COMMIT;
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bootstrap
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bootstrap
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["client-keys"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bootstrap
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: bootstrap
+    namespace: pricetag-backend
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrap
+  namespace: pricetag-backend
+  labels:
+    app: bootstrap
+    app.kubernetes.io/name: bootstrap
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 2
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      labels:
+        app: bootstrap
+        app.kubernetes.io/name: bootstrap
+        app.kubernetes.io/part-of: pricetag-backend
+    spec:
+      restartPolicy: Never
+      serviceAccountName: bootstrap
+      initContainers:
+        # Migrations may still be running after PostgreSQL becomes ready.
+        - name: model-pricing
+          image: docker.io/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              end=$(( $(date +%s) + READINESS_SECONDS ))
+              until psql -X -h postgres -U pricetag -d pricetag -v ON_ERROR_STOP=1 -f /code/model-pricing.sql >/dev/null 2>&1; do
+                if [ "$(date +%s)" -ge "$end" ]; then
+                  echo 'Database migrations/pricing initialization timed out' >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+          env:
+            - name: PGCONNECT_TIMEOUT
+              value: "5"
+            - name: PGOPTIONS
+              value: "-c statement_timeout=30000 -c lock_timeout=5000"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: postgres-credentials
+            - name: READINESS_SECONDS
+              value: "180"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /code
+              name: code
+              readOnly: true
+      containers:
+        - name: provision
+          image: docker.io/library/python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/code/bootstrap_job.py"]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /code
+              name: code
+              readOnly: true
+            - mountPath: /settings
+              name: settings
+              readOnly: true
+            - mountPath: /auth
+              name: auth
+              readOnly: true
+        - name: dashboard-roles
+          image: docker.io/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              end=$(( $(date +%s) + READINESS_SECONDS ))
+              until psql -X -h postgres -U pricetag -d pricetag -v ON_ERROR_STOP=1 -v admin_users="$ADMIN_USERS" -f /code/dashboard-roles.sql >/dev/null 2>&1; do
+                if [ "$(date +%s)" -ge "$end" ]; then
+                  echo 'Dashboard role initialization timed out; check configured administrators and user provisioning' >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              echo 'Dashboard roles initialized'
+          env:
+            - name: ADMIN_USERS
+              value: admin@pricetag-backend.invalid
+            - name: PGCONNECT_TIMEOUT
+              value: "5"
+            - name: PGOPTIONS
+              value: "-c statement_timeout=30000 -c lock_timeout=5000"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: postgres-credentials
+            - name: READINESS_SECONDS
+              value: "180"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /code
+              name: code
+              readOnly: true
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: code
+          configMap:
+            name: bootstrap-code
+        - name: settings
+          configMap:
+            name: bootstrap-settings
+        - name: auth
+          secret:
+            secretName: service-auth
+            items:
+              - key: management-token
+                path: management-token
+              - key: model-policy-token
+                path: model-policy-token

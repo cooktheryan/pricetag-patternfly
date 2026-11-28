@@ -1,0 +1,285 @@
+# praxis: the AI gateway (quay.io/redhat-et/praxis-ai). Authenticates API keys
+# via maas-api, meters via metering-service, and routes OpenAI-dialect traffic
+# to api.openai.com with the provider credential from the provider-credentials
+# Secret (EnMaaS-opps praxis-slot pattern). Exposed on the public gateway host
+# for OpenAI-compatible clients.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: praxis
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/name: praxis
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: praxis
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: praxis
+        app.kubernetes.io/name: praxis
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/part-of: pricetag-backend
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: praxis
+          image: quay.io/redhat-et/praxis-ai@sha256:240bcdaa73f4ca81a670dc0451db3072aa5190eca71f2af13c5ddfb75e49abdc
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - ulimit -n 65536 && exec /usr/local/bin/praxis-ai -c /etc/praxis/praxis.yaml
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: OPENAI_API_KEY
+                  name: provider-credentials
+          ports:
+            - containerPort: 8081
+              name: openai
+              protocol: TCP
+            - containerPort: 8084
+              name: unified
+              protocol: TCP
+            - containerPort: 9901
+              name: admin
+              protocol: TCP
+            - containerPort: 9902
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthy
+              port: metrics
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthy
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /etc/praxis
+              name: config
+              readOnly: true
+            - mountPath: /etc/praxis/routing/openai
+              name: routing-openai
+              readOnly: true
+            - mountPath: /etc/praxis/routing/unified
+              name: routing-unified
+              readOnly: true
+            - mountPath: /etc/praxis-secrets
+              name: metering-internal-auth
+              readOnly: true
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: praxis-config
+        - name: routing-openai
+          configMap:
+            name: praxis-routing-openai
+        - name: routing-unified
+          configMap:
+            name: praxis-routing-unified
+        - name: metering-internal-auth
+          secret:
+            secretName: metering-internal-auth
+            items:
+              - key: token
+                path: metering-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: praxis
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/name: praxis
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: pricetag-backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9902"
+spec:
+  ports:
+    - name: openai
+      port: 8081
+      protocol: TCP
+      targetPort: openai
+    - name: unified
+      port: 8084
+      protocol: TCP
+      targetPort: unified
+    # No admin port: the admin listener (9901) is not routed and has no
+    # in-cluster consumer; leaving it off the Service keeps a stable name
+    # off the gateway's administrative surface.
+    - name: metrics
+      port: 9902
+      protocol: TCP
+      targetPort: metrics
+  selector:
+    app: praxis
+---
+# Public gateway host: OpenAI-compatible endpoints for clients (curl, OpenAI
+# SDK, Codex). Same path split as the EnMaaS-opps ai-gateway routes.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gateway-chat-completions
+  namespace: pricetag-backend
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+  labels:
+    app: praxis
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  host: ${GATEWAY_HOST}
+  path: /v1/chat/completions
+  port:
+    targetPort: openai
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: praxis
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gateway-responses
+  namespace: pricetag-backend
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+  labels:
+    app: praxis
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  host: ${GATEWAY_HOST}
+  path: /v1/responses
+  port:
+    targetPort: openai
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: praxis
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gateway-conversations
+  namespace: pricetag-backend
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+  labels:
+    app: praxis
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  host: ${GATEWAY_HOST}
+  path: /v1/conversations
+  port:
+    targetPort: openai
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: praxis
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gateway-models
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  host: ${GATEWAY_HOST}
+  path: /v1/models
+  port:
+    targetPort: unified
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: praxis
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gateway-messages
+  namespace: pricetag-backend
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
+  labels:
+    app: praxis
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  host: ${GATEWAY_HOST}
+  path: /v1/messages
+  port:
+    targetPort: unified
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: praxis
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gateway-health
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  host: ${GATEWAY_HOST}
+  path: /health
+  port:
+    targetPort: unified
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: praxis

@@ -1,0 +1,132 @@
+# NetworkPolicies for the backend stack (mocker-proven structure):
+# - default-deny ingress, with same-namespace traffic allowed
+# - the OpenShift router may reach praxis (public gateway routes)
+# - the pricetag-patternfly UI namespace may reach metering-service (the UI
+#   proxy's upstream)
+# - praxis egress is restricted to maas-api, metering-service, DNS, and
+#   public HTTPS (api.openai.com)
+# Everything else (postgres, maas-api, metering-service, builds) keeps the
+# namespace default egress so builds can pull and push images.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-namespace
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: praxis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 8084
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ui-metering
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: metering-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pricetag-patternfly
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: praxis-egress
+  namespace: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: praxis
+  policyTypes:
+    - Egress
+  egress:
+    # Key validation and metering.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: maas-api
+        - podSelector:
+            matchLabels:
+              app: metering-service
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Cluster DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 53
+        - protocol: TCP
+          port: 5353
+    # Public HTTPS upstreams (api.openai.com is anycast; IP pinning is not
+    # stable, so allow the port cluster-wide).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

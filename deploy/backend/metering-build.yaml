@@ -1,0 +1,43 @@
+# Build the metering-service image from the pricetag-metering source into the
+# cluster's internal registry (native amd64 build; no local container runtime
+# needed). deploy.sh runs:
+#   oc start-build -n pricetag-backend metering-service \
+#     --from-dir="$METERING_SOURCE_DIR" --wait
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/component: metering
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: metering-service
+  namespace: pricetag-backend
+  labels:
+    app: metering-service
+    app.kubernetes.io/name: metering-service
+    app.kubernetes.io/component: metering
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+spec:
+  runPolicy: Serial
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: metering-service:latest

@@ -1,0 +1,15 @@
+# Backend stack for the PriceTag PatternFly UI: Postgres + maas-api (key
+# service) + metering-service (management API the UI proxies to) + praxis
+# (AI gateway fronting OpenAI). Modeled on EnMaaS-opps (base/projects/enmaas)
+# and the standalone compose stack in pricetag-metering.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pricetag-backend
+  labels:
+    app.kubernetes.io/part-of: pricetag-backend
+    app.kubernetes.io/managed-by: pricetag-deploy
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

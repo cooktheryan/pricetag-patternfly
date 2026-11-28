@@ -1,0 +1,289 @@
+# praxis-ai gateway pipeline config: API-key auth against maas-api, metering
+# through metering-service, routing to OpenAI with the provider credential
+# injected from the OPENAI_API_KEY env var (EnMaaS-opps prod pattern).
+# Listeners: openai (8081, /v1/chat/completions + /v1/responses) and unified
+# (8084, /v1/models + /v1/messages).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: praxis-config
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/name: praxis
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: pricetag-backend
+data:
+  praxis.yaml: |
+    admin:
+      address: 0.0.0.0:9901
+      # praxis 0.7.4+ serves /healthy, /ready, /metrics here (not on the
+      # admin API address); the container probes /healthy on this port.
+      metrics_address: 0.0.0.0:9902
+    insecure_options:
+      allow_public_admin: true
+      allow_private_upstreams: true
+    listeners:
+    - name: openai
+      address: 0.0.0.0:8081
+      filter_chains:
+      - openai
+    - name: unified
+      address: 0.0.0.0:8084
+      filter_chains:
+      - unified
+    filter_chains:
+    - name: openai
+      filters:
+      - filter: static_response
+        status: 200
+        body: "OK"
+        conditions:
+        - when:
+            path: /health
+            methods: ["GET"]
+      - filter: api_key_auth
+        validate_url: http://maas-api:8080/internal/v1/api-keys/validate
+        token_header: authorization
+        cache_ttl_seconds: 5
+        timeout_seconds: 5
+      - filter: reject_upgrade
+        protocols:
+        - websocket
+      - filter: model_catalog
+        format: openai
+        path: /v1/models
+        overlay_file: /etc/praxis/routing/openai/routing-overlay.json
+      - filter: identity_header_guard
+        prefix: x-tenant-
+      - filter: model_to_header
+        header: X-Model
+      - filter: intelligent_route
+        overlay_file: /etc/praxis/routing/openai/routing-overlay.json
+        model_header: X-Model
+        body_authoritative: true
+        reload:
+          enabled: true
+          debounce_ms: 500
+      - filter: external_metering
+        metering_url: http://metering-service:8080
+        internal_auth_file: /etc/praxis-secrets/metering-token
+        allow_private_endpoint: true
+        timeout_seconds: 5
+        feature_key: inference-tokens
+        source: pricetag-backend
+        fail_open: false
+        identity_header_prefix: x-tenant-
+        model_policy_check: true
+        model_policy_fail_open: false
+        default_model: unknown
+      - filter: stream_usage_inject
+      - filter: time_to_first_token
+      - filter: token_count
+        provider: openai
+        max_scratch_bytes: 1048576
+      - filter: token_usage_headers
+      - filter: headers
+        request_remove:
+        - authorization
+        - x-api-key
+      - filter: credential_injection
+        clusters:
+        - name: openai
+          header: Authorization
+          env_var: OPENAI_API_KEY
+          header_prefix: "Bearer "
+          strip_client_credential: true
+      - filter: headers
+        request_set:
+        - name: Host
+          value: api.openai.com
+        request_remove:
+        - accept-encoding
+        - x-praxis-ai-provider
+      - filter: load_balancer
+        clusters:
+        - name: openai
+          tls:
+            sni: api.openai.com
+          idle_timeout_ms: 45000
+          endpoints:
+          - api.openai.com:443
+    - name: unified
+      filters:
+      - filter: static_response
+        status: 200
+        body: "OK"
+        conditions:
+        - when:
+            path: /health
+            methods: ["GET"]
+      - filter: api_key_auth
+        validate_url: http://maas-api:8080/internal/v1/api-keys/validate
+        token_header: x-api-key
+        cache_ttl_seconds: 5
+        timeout_seconds: 5
+        conditions:
+        - when:
+            headers:
+              anthropic-version: "2023-06-01"
+      - filter: api_key_auth
+        validate_url: http://maas-api:8080/internal/v1/api-keys/validate
+        token_header: authorization
+        cache_ttl_seconds: 5
+        timeout_seconds: 5
+        conditions:
+        - unless:
+            headers:
+              anthropic-version: "2023-06-01"
+      - filter: model_catalog
+        format: anthropic
+        path: /v1/models
+        overlay_file: /etc/praxis/routing/unified/routing-overlay.json
+        conditions:
+        - when:
+            headers:
+              anthropic-version: "2023-06-01"
+      - filter: model_catalog
+        format: openai
+        path: /v1/models
+        overlay_file: /etc/praxis/routing/openai/routing-overlay.json
+        conditions:
+        - unless:
+            headers:
+              anthropic-version: "2023-06-01"
+      - filter: identity_header_guard
+        prefix: x-tenant-
+      - filter: model_to_header
+        header: X-Model
+      - filter: intelligent_route
+        overlay_file: /etc/praxis/routing/unified/routing-overlay.json
+        model_header: X-Model
+        body_authoritative: true
+        reload:
+          enabled: true
+          debounce_ms: 500
+      - filter: external_metering
+        metering_url: http://metering-service:8080
+        internal_auth_file: /etc/praxis-secrets/metering-token
+        allow_private_endpoint: true
+        timeout_seconds: 5
+        feature_key: inference-tokens
+        source: pricetag-backend
+        fail_open: false
+        identity_header_prefix: x-tenant-
+        model_policy_check: true
+        model_policy_fail_open: false
+        default_model: unknown
+      - filter: stream_usage_inject
+      - filter: time_to_first_token
+      - filter: token_count
+        provider: anthropic
+        max_scratch_bytes: 1048576
+      - filter: token_usage_headers
+      - filter: headers
+        request_remove:
+        - authorization
+        - x-api-key
+      - filter: credential_injection
+        clusters:
+        - name: openai
+          header: Authorization
+          env_var: OPENAI_API_KEY
+          header_prefix: "Bearer "
+          strip_client_credential: true
+      - filter: headers
+        request_set:
+        - name: Host
+          value: api.openai.com
+        request_remove:
+        - accept-encoding
+        - x-praxis-ai-provider
+      - filter: load_balancer
+        clusters:
+        - name: openai
+          tls:
+            sni: api.openai.com
+          idle_timeout_ms: 45000
+          endpoints:
+          - api.openai.com:443
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: praxis-routing-openai
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/name: praxis
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: pricetag-backend
+data:
+  routing-overlay.json: |
+    {
+      "local_site": "pricetag-backend",
+      "network": "pricetag-backend",
+      "selection_policy": {
+        "mode": "deterministic"
+      },
+      "candidates": [
+        {
+          "kind": "inference_model",
+          "name": "gpt-5.4",
+          "site": "pricetag-backend",
+          "cluster": "openai",
+          "catalog": ["openai"],
+          "owned_by": "openai"
+        },
+        {
+          "kind": "inference_model",
+          "name": "gpt-5.3-codex",
+          "site": "pricetag-backend",
+          "cluster": "openai",
+          "catalog": ["openai"],
+          "owned_by": "openai"
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: praxis-routing-unified
+  namespace: pricetag-backend
+  labels:
+    app: praxis
+    app.kubernetes.io/name: praxis
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: pricetag-backend
+data:
+  # Same legacy-format candidates as the openai overlay. The new praxis image
+  # rejects paths/target_model in legacy overlays (those require the versioned
+  # envelope format), and this deployment has no Anthropic-native upstream
+  # anyway: /v1/messages requests forward to OpenAI and 404 there.
+  routing-overlay.json: |
+    {
+      "local_site": "pricetag-backend",
+      "network": "pricetag-backend",
+      "selection_policy": {
+        "mode": "deterministic"
+      },
+      "candidates": [
+        {
+          "kind": "inference_model",
+          "name": "gpt-5.4",
+          "site": "pricetag-backend",
+          "cluster": "openai",
+          "catalog": ["openai"],
+          "owned_by": "openai"
+        },
+        {
+          "kind": "inference_model",
+          "name": "gpt-5.3-codex",
+          "site": "pricetag-backend",
+          "cluster": "openai",
+          "catalog": ["openai"],
+          "owned_by": "openai"
+        }
+      ]
+    }
