@@ -1,0 +1,67 @@
+# Qodo code review configuration for cooktheryan/pricetag-patternfly.
+# Reference: https://docs.qodo.ai/configuration/configuration-and-command-reference
+# Repository review standards live in REVIEW.md (enable_review_md below).
+
+[config]
+# Per-PR opt-out: add this label to skip Qodo on a pull request.
+ignore_pr_labels = ["skip-review"]
+
+[github_app]
+# Automatic summary + review when a PR is opened, reopened, or marked ready.
+pr_commands = ["/agentic_describe", "/agentic_review"]
+# This repo works in draft PRs, so review them as soon as they open.
+feedback_on_draft_pr = true
+# Keep findings in sync with the branch as fixes land.
+handle_push_trigger = true
+push_commands = ["/agentic_review"]
+# Dependabot and other bot PRs are noise.
+ignore_bot_pr = true
+
+[review_agent]
+# Summary + inline findings; inline only for High and Medium.
+comments_location_policy = "both"
+inline_comments_severity_threshold = 2
+# Push-triggered re-reviews only look at changes since the last review.
+enable_incremental_review = true
+enable_fix_loop_optimization = true
+# Apply REVIEW.md and the specs under specs/.
+enable_review_md = true
+enable_spec_agent = true
+enable_web_search_tool = true
+enable_commitable_suggestions = true
+
+issues_user_guidelines = """
+Prioritize correctness and security over style; oxlint and tsc already cover formatting.
+
+Security invariants:
+- Minted API keys and credentials must never reach React state, the DOM,
+  localStorage/sessionStorage, URLs, or logs. Keys stay in refs and reveal state
+  auto-clears.
+- Do not weaken the nginx security headers in deploy/k8s/nginx-config.yaml (CSP, HSTS,
+  frame-ancestors, Referrer-Policy, Permissions-Policy, COOP/CORP), the identity-header
+  clearing, or XFF normalization.
+- The runtime container must stay non-root (UID 1001), read-only root filesystem, drop
+  ALL capabilities, and digest-pinned images.
+- Flag any credential, token, or key literal in manifests, scripts, fixtures, or tests.
+
+Contracts:
+- The SPA must accept both metering response shapes: standalone returns a bare array,
+  cluster mode wraps rows in {rows, totals} for /api/v1/org/usage and equivalent
+  endpoints.
+- Identity headers (X-Forwarded-User) and API-key login are trust boundaries; never
+  trust client-supplied identity downstream.
+
+Deploy scripts and manifests:
+- deploy/**/*.sh must be idempotent and safe to re-run. Flag unquoted expansions,
+  unchecked commands, and state mutations that happen before input validation.
+- Flag NetworkPolicy widening, missing resource limits/probes, plaintext secrets, and
+  mutable image tags in Kubernetes manifests.
+"""
+
+[qodo_describe_agent]
+publish_mode = "comment"
+
+[pr_risk]
+enabled = true
+assess_every_push = true
+publish_labels = false
